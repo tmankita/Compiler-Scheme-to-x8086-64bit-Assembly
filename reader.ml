@@ -236,7 +236,6 @@ end;; (* end of struct PC *)
  let charList_to_left_number b charList minus = List.fold_left (fun num acc -> b *. num +. acc ) 0.0 (List.map (fun x->  float_of_int((int_of_char x)-(int_of_char minus)) ) charList) ;;
  let charList_to_right_number b charList minus = (List.fold_right (fun num acc ->   num  +. acc/.b )  (List.map (fun x-> float_of_int((int_of_char x)-(int_of_char minus)) ) charList) 0.0)/. b;;
  
-charList_to_right_number 10.0 ['1';'2';'3'];;
   let _space_ =       (*add more kind of spaces*)
     PC.const (fun ch -> ch <= ' ');;
   
@@ -250,10 +249,6 @@ charList_to_right_number 10.0 ['1';'2';'3'];;
   
   let _hashSymbol_ =
     PC.char '#';;
-
-
-  let get1_1 (e1, e2)= e1;;
-  let get1_2 (e1, e2)= e2;;
 
   let _boolean_ = (make_spaced (PC.caten _hashSymbol_ (PC.one_of_ci "tf")));;
 
@@ -362,8 +357,6 @@ let make_floating_point =
                     else raise PC.X_no_match ;;
   
 
- make_floating_point (string_to_list "-102.000000000000001");;
-
  let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
 
  let nt_HexFloat=  make_spaced( PC.caten (PC.caten nt_HexInteger nt_right_side_hex_floating_point) PC.nt_end_of_input);;
@@ -387,12 +380,8 @@ let make_floating_point =
 
 
 let make_Number= PC.disj_list [make_integer ; make_floating_point ; make_HexFloat];;
-float_of_string("0x1a");;
-make_Number (string_to_list "#xa.b");;
 
- let nt_symbol = make_spaced  (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_"));;
-
-nt_symbol (string_to_list "acl");;
+let nt_symbol = make_spaced  (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_"));;
 
  let correct_symbol symbol = 
   Symbol(list_to_string (List.map lowercase_ascii symbol ));;
@@ -464,7 +453,7 @@ let nt_semicolon= PC.char ';';;
   
   let nt_StringLiteralChar = PC.diff PC.nt_any (PC.one_of "\\\"");;
 
-   nt_StringHexChar (string_to_list "\\x58a;");;
+ 
 
    let make_StringHexChar= 
     fun s->
@@ -477,7 +466,8 @@ let nt_semicolon= PC.char ';';;
     let (e,s)= (nt_StringLiteralChar s) in
      ([e],s);;
      string_to_list "\"\"\"\"\"";;
-nt_StringMetaChar (string_to_list "\\\"\\\"\\\"\\\"\\\"");;
+
+
   let make_StringMetaChar = 
     fun s->
     let (e,s)= (nt_StringMetaChar s) in
@@ -506,9 +496,6 @@ let build_string e =
     let (e,s)=  (nt_String s) in
     let (e,s)= e in
      (build_string e);;
-
-
-
 
 
   nt_StringChar (string_to_list "a");;
