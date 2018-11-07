@@ -452,8 +452,8 @@ let nt_semicolon= PC.char ';';;
   let nt_StringMetaChar = PC.disj_list [(PC.word "\\\""); (PC.word "\\\\"); (PC.word "\\\\t");(PC.word "\\\\f");(PC.word "\\\\n");(PC.word "\\\\r")] ;;
   
   let nt_StringLiteralChar = PC.diff PC.nt_any (PC.one_of "\\\"");;
-
- 
+  PC.word "\\\"" (string_to_list "\\\"");;
+ nt_StringMetaChar (string_to_list "\\\"");;
 
    let make_StringHexChar= 
     fun s->
@@ -465,8 +465,9 @@ let nt_semicolon= PC.char ';';;
     fun s->
     let (e,s)= (nt_StringLiteralChar s) in
      ([e],s);;
-     string_to_list "\"\"\"\"\"";;
 
+     string_to_list "\"\"\"\"\"";;
+    list_to_string ['\\'; '"'];;
 
   let make_StringMetaChar = 
     fun s->
@@ -497,11 +498,12 @@ let build_string e =
     let (e,s)= e in
      (build_string e);;
 
-
+  string_to_list "\"\\\"\\\"\\\"\\\"\\\"\"";;
   nt_StringChar (string_to_list "a");;
   nt_StringLiteralChar (string_to_list "aba");;
   nt_String (string_to_list "\"a ba\"");;
-  make_String (string_to_list "\\\"\\\"\\\"\\\"\\\"");;
+  nt_String(string_to_list "\\\"\\\"\\\"\\\"\\\"");;
+  make_String (string_to_list "\"\\\"\\\"\\\"\\\"\\\"\"");;
      
                  
 module Reader: sig
