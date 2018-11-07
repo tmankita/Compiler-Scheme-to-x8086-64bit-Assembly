@@ -232,9 +232,11 @@ end;; (* end of struct PC *)
    | Vector(l1), Vector(l2) -> List.for_all2 sexpr_eq l1 l2
    | _ -> false;;
    
-
- let charList_to_number base charList = List.fold_left (fun num acc -> base*num +acc ) 0 (List.map (fun x-> (int_of_char x)-(int_of_char '0') ) charList);;
-  
+   int_of_char 'c' - int_of_char 'W';; 
+ let charList_to_left_number b charList minus = List.fold_left (fun num acc -> b *. num +. acc ) 0.0 (List.map (fun x->  float_of_int((int_of_char x)-(int_of_char minus)) ) charList) ;;
+ let charList_to_right_number b charList minus = (List.fold_right (fun num acc ->   num  +. acc/.b )  (List.map (fun x-> float_of_int((int_of_char x)-(int_of_char minus)) ) charList) 0.0)/. b;;
+ 
+charList_to_right_number 10.0 ['1';'2';'3'];;
   let _space_ =       (*add more kind of spaces*)
     PC.const (fun ch -> ch <= ' ');;
   
@@ -270,24 +272,16 @@ end;; (* end of struct PC *)
         if head <= ' ' then correct_boolean e
         else raise PC.X_no_match ;;
       
-  make_boolean ['#';'t';' '];;
-                              
-
 
   let make_sign =PC.maybe (PC.one_of "+-");;
      
-  
-  let nt_hex = PC.caten (_hashSymbol_) ((PC.caten (PC.caten (PC.char_ci 'x')
+  let nt_HexInteger = PC.caten (_hashSymbol_) ((PC.caten (PC.caten (PC.char_ci 'x')
                                                           (make_sign))
                                                 (PC.plus (PC.one_of_ci "0123456789abcdef"))));;
 
   let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
 
-   
-
-  let nt_integer= make_spaced (PC.disj (nt_hex) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  )));;
-
-  nt_integer ['-';'1';'a'];;
+  let nt_integer= make_spaced (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  )));;
 
 let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
 
@@ -304,12 +298,12 @@ let make_decimal_number sign num =
   |None -> build_integer "" num ;;
 
 (*this is a help function for make integer*)
-  let make_number (opt, sign) num = if opt = 'x' || opt = 'X' then make_hex_number sign num
+  let helpNumber (opt, sign) num = if opt = 'x' || opt = 'X' then make_hex_number sign num
                                     else make_decimal_number sign num ;;
   let correct_integer e = 
     let (symbol , rest) = e in
     let (e , num ) = rest in
-        Number(Int(make_number e num));;
+        Number(Int(helpNumber e num));;
     
   let make_integer = 
     fun s ->
@@ -320,9 +314,7 @@ let make_decimal_number sign num =
     if head <= ' ' then correct_integer e
     else raise PC.X_no_match ;;
 
-
     make_integer (string_to_list "0000000003");;
-
     
 let disj_sexpr p1 p2 =
   fun s ->
@@ -338,23 +330,27 @@ let decimal_point =
 
 let nt_right_side_floating_point = PC.caten decimal_point (PC.plus (PC.one_of "0123456789"));;
 
-let nt_floating_point= make_spaced (PC.caten nt_decimal nt_right_side_floating_point);;
+let nt_floating_point= make_spaced PC.(PC.caten nt_decimal nt_right_side_floating_point);;
 
 nt_floating_point (string_to_list "5a.34");;
 
-let build_float sign number= 
+let makeLeftSide left =  charList_to_left_number left;;
+let makeRightSide right= charList_to_right_number right;; 
+let catenFloat left right = (makeLeftSide 10.0 left '0') +. (makeRightSide  10.0 right '0');;
+
+let build_float sign left right= 
   match sign with
-  | None -> number
-  | Some nOp -> if nOp = '+' then number
-                else if nOp = '-' then (-1.0 *. number)
+  | None -> catenFloat left right
+  | Some nOp -> if nOp = '+' then catenFloat left right
+                else if nOp = '-' then (-1.0 *. (catenFloat left right))
                 else raise PC.X_no_match;;
 
 (*need to check about zeros after decimal point like -102.000000000000001*)
 let correct_floating_point e = 
-  let (right_side, left_side) = e in
-   let (sign, right_num) = right_side in
-    let (point, left_num) = left_side in
-     Number(Float(build_float sign (float_of_string (list_to_string (right_num @ point :: left_num)))));;
+  let (left_side, right_side) = e in
+   let (sign, left_num) = left_side in
+    let (point, right_num) = right_side in
+     Number(Float(build_float sign (List.map lowercase_ascii left_num) (List.map lowercase_ascii right_num)));;
     
 
 let make_floating_point = 
@@ -366,7 +362,33 @@ let make_floating_point =
                     else raise PC.X_no_match ;;
   
 
- make_floating_point (string_to_list "-102.00000001");;
+ make_floating_point (string_to_list "-102.000000000000001");;
+
+ let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
+
+ let nt_HexFloat=  make_spaced( PC.caten (PC.caten nt_HexInteger nt_right_side_hex_floating_point) PC.nt_end_of_input);;
+
+ 
+ let concat_hex left right= String.concat "" ["0x" ; (list_to_string left) ; "." ; (list_to_string right)];; 
+ let catenFloat_hex left right = float_of_string (concat_hex left right) ;;
+ 
+ let build_float_hex sign left right= 
+   match sign with
+   | None -> catenFloat_hex left right
+   | Some nOp -> if nOp = '+' then catenFloat_hex left right
+                 else if nOp = '-' then (-1.0 *. (catenFloat_hex left right))
+                 else raise PC.X_no_match;;
+ 
+
+ let make_HexFloat= 
+  fun s->
+  let ((((hash, ((x, sign), left_Hexnumber)), (dot, right_Hexnumber)), nil2), nil1) = (nt_HexFloat s) in
+  Number(Float(build_float_hex  sign left_Hexnumber right_Hexnumber));;
+
+
+let make_Number= PC.disj_list [make_integer ; make_floating_point ; make_HexFloat];;
+float_of_string("0x1a");;
+make_Number (string_to_list "#xa.b");;
 
  let nt_symbol = make_spaced  (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_"));;
 
@@ -382,25 +404,133 @@ nt_symbol (string_to_list "acl");;
   | [] -> correct_symbol e
   | head:: tail -> if head <= ' ' then correct_symbol e
                     else raise PC.X_no_match ;;
-  
-make_integer (string_to_list "20000000000000000000000000000000");;
-  
-  module Reader: sig
-    val read_sexpr : string -> sexpr
-    val read_sexprs : string -> sexpr list
-  end
-  = struct
-  let normalize_scheme_symbol str =
-    let s = string_to_list str in
-    if (andmap
-    (fun ch -> (ch = (lowercase_ascii ch)))
-    s) then str
-    else Printf.sprintf "|%s|" str;;
-  
-  let read_sexpr string = raise X_not_yet_implemented ;;
-  
-  let read_sexprs string = raise X_not_yet_implemented;;
-    
-  end;; (* struct Reader *)
 
+
+  let nt_slash = PC.char '\\';;
+  let nt_x = PC.char 'x';;
+
+  let nt_CharPrefix = PC.caten _hashSymbol_ nt_slash;;
+  let nt_VisibleSimpleChar = PC.caten (PC.caten nt_CharPrefix (PC.diff PC.nt_any PC.nt_whitespace)) PC.nt_end_of_input;;
+  let nt_NamedChar =PC.caten (PC.caten nt_CharPrefix (PC.disj_list [(PC.word "newline"); (PC.word "nul"); (PC.word "page"); (PC.word "return"); (PC.word "space"); (PC.word "tab");(PC.word "double quote");(PC.word "\\");(PC.word "\"");(PC.word "f"); (PC.word "t"); (PC.word "r"); (PC.word "n")] )) PC.nt_end_of_input;;
+  let nt_HexChar= PC.caten (PC.caten nt_CharPrefix (PC.caten nt_x  (PC.one_of_ci "0123456789abcdef"))) PC.nt_end_of_input;;
   
+
+
+  let make_VisibleSimpleChar = 
+    fun s->
+    let (e,s) = (nt_VisibleSimpleChar s) in
+    let (e,s) = e in
+      let(prefix,c) = e in
+        Char(c);;
+let correct_char ascii = Char(Char.chr ascii);; 
+
+let make_NamedChar =
+  fun s ->
+  let (e,s)= (nt_NamedChar s) in
+  let (e,s)= e in
+  let (prefix,namedChar) = e in
+  match  list_to_string namedChar with
+  | "newline"  -> correct_char 010
+  |"n" -> correct_char 010
+  |"page" -> correct_char 012
+  | "f" -> correct_char 012
+  |"return" -> correct_char 013
+  |"r"-> correct_char 013
+  |"tab" ->correct_char 009
+  |"t"->correct_char 009
+  |"backslash" ->correct_char 092
+  |"\\"->correct_char 092
+  |"double qoute" ->correct_char 034
+  |"\"" ->correct_char 034
+  |"nul" ->correct_char 000
+  | _-> Nil;;
+
+ let make_HexChar = 
+  fun s->
+  let ((e,es),s)= (nt_HexChar s) in
+  let (prefix, (x,hexChar))= e in
+    Char(hexChar);;
+
+
+let make_Char = PC.disj_list [make_VisibleSimpleChar; make_HexChar; make_NamedChar];;
+
+let nt_semicolon= PC.char ';';; 
+  
+  let nt_slash_x =  PC.caten nt_slash (nt_x);;
+  
+  let nt_StringHexChar =PC.caten (PC.caten nt_slash_x (PC.plus (PC.one_of_ci "0123456789abcdef"))) nt_semicolon;;
+  
+  let nt_StringMetaChar = PC.disj_list [(PC.word "\\\""); (PC.word "\\\\"); (PC.word "\\\\t");(PC.word "\\\\f");(PC.word "\\\\n");(PC.word "\\\\r")] ;;
+  
+  let nt_StringLiteralChar = PC.diff PC.nt_any (PC.one_of "\\\"");;
+
+   nt_StringHexChar (string_to_list "\\x58a;");;
+
+   let make_StringHexChar= 
+    fun s->
+    let (e,s)= (nt_StringHexChar s) in
+    let ((prefix, hexNumber), semicolon) = e in
+    (hexNumber,s);;
+
+  let make_StringLiteralChar= 
+    fun s->
+    let (e,s)= (nt_StringLiteralChar s) in
+     ([e],s);;
+     string_to_list "\"\"\"\"\"";;
+nt_StringMetaChar (string_to_list "\\\"\\\"\\\"\\\"\\\"");;
+  let make_StringMetaChar = 
+    fun s->
+    let (e,s)= (nt_StringMetaChar s) in
+   
+    match list_to_string e with
+    |"n" -> (['\n'],s)
+    |"f" -> ( ['\\';'f'],s)
+    |"r"-> (['\r'],s)
+    |"t"->(['\t'],s)
+    |"\\"->(['\\'],s)
+    |"\\\"" ->(['\"'],s)
+    |_-> ([],s);;
+
+  let nt_StringChar= PC.disj_list [make_StringHexChar; make_StringMetaChar ; make_StringLiteralChar];;
+
+  let nt_doubleQuote= PC.char '"';;
+
+  let nt_String=PC.caten(PC.caten nt_doubleQuote  (PC.caten (PC.star nt_StringChar) nt_doubleQuote)) PC.nt_end_of_input  ;;
+
+let build_string e = 
+  let (q_1, (sen, q_2)) = e in
+  String (String.concat "" ["\"";list_to_string (List.map (fun l -> (List.nth l 0)) sen);"\""]);;
+
+  let make_String =
+    fun s->
+    let (e,s)=  (nt_String s) in
+    let (e,s)= e in
+     (build_string e);;
+
+
+
+
+
+  nt_StringChar (string_to_list "a");;
+  nt_StringLiteralChar (string_to_list "aba");;
+  nt_String (string_to_list "\"a ba\"");;
+  make_String (string_to_list "\\\"\\\"\\\"\\\"\\\"");;
+     
+                 
+module Reader: sig
+  val read_sexpr : string -> sexpr
+  val read_sexprs : string -> sexpr list
+end
+= struct
+let normalize_scheme_symbol str =
+  let s = string_to_list str in
+  if (andmap
+	(fun ch -> (ch = (lowercase_ascii ch)))
+	s) then str
+  else Printf.sprintf "|%s|" str;;
+
+let read_sexpr string = raise X_not_yet_implemented ;;
+
+let read_sexprs string = raise X_not_yet_implemented;;
+  
+end;; (* struct Reader *)
