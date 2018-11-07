@@ -8,7 +8,11 @@
             "name": "OCaml",
             "type": "ocamldebug",
             "request": "launch",
+<<<<<<< HEAD
             "program": "${workspaceRoot}/main.d.byte",
+=======
+            "program": "${workspaceRoot}/a.out",
+>>>>>>> d30f28b913bea5863b0b5dfd56fb6f4ae52dd8de
             "console": "internalConsole",
             "stopOnEntry": false
         }
