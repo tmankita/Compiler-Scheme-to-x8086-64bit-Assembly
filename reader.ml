@@ -377,7 +377,7 @@ let make_floating_point =
   ((Number(Float(build_float_hex  sign left_Hexnumber right_Hexnumber))),s);;
 
 
-let make_Number= PC.disj_list [make_integer ; make_floating_point ; make_HexFloat];;
+let make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer];;
 
 let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_"));;
 
@@ -518,7 +518,7 @@ let build_string e =
   let make_Nil = 
     fun s->
     let (e,s) = (nt_Nil s) in
-     ((),s);;
+     (Nil,s);;
 
 
      let make_commentLine = 
@@ -526,10 +526,15 @@ let build_string e =
         let (_,s) = (nt_commentLine s) in
           (Nil,s);;
 
+     let make_empty= 
+      fun s-> 
+      match s with
+      |[]->(Nil,[])
+      |_->raise PC.X_no_match;;
 
      let rec nt_sexpr = 
      function
-      |_-> PC.disj_list [make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_vector; make_commentLine] 
+      |_-> PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] 
   
      and make_list =
       fun s->
@@ -547,28 +552,28 @@ let build_string e =
       let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  in
       let (sym_sexp,rest ) = (nt_Quoted s) in
         let (name,sexpr)= sym_sexp in
-          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
       and make_QQuoted = 
       fun s -> 
       let nt_q2= PC.word "‘" in
       let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  in
       let (sym_sexp,rest ) = (nt_QQuoted s) in
         let (name,sexpr)= sym_sexp in
-          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
       and make_UnquotedSpliced = 
       fun s -> 
       let nt_q3= PC.word  ",@" in
       let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w') in
       let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
         let (name,sexpr)= sym_sexp in
-          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
       and make_Unquoted = 
       fun s -> 
       let nt_q4= PC.word  "," in
       let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) in
       let (sym_sexp,rest ) = (nt_Unquoted s) in
         let (name,sexpr)= sym_sexp in
-          Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
+          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest);;
 
       nt_sexpr 'w' (string_to_list "(1 ( 1 ))") ;;
 
@@ -591,6 +596,7 @@ module Reader: sig
   val read_sexpr : string -> sexpr
   val read_sexprs : string -> sexpr list
 end
+
 = struct
 let normalize_scheme_symbol str =
   let s = string_to_list str in
@@ -598,7 +604,8 @@ let normalize_scheme_symbol str =
 	(fun ch -> (ch = (lowercase_ascii ch)))
 	s) then str
   else Printf.sprintf "|%s|" str;;
-  let read_sexpr_tuple list = let e  = (nt_sexpr 'w' list) in  e;;
+
+ 
 
   
   let rec sexpr_comment  =  
@@ -614,7 +621,7 @@ let normalize_scheme_symbol str =
       match rest_sexprs with
       |(e,[])-> Nil,[]
       |(e,s2) -> (sexpr_comment s2)
-      with PC.X_no_match -> read_sexpr_tuple s ;;
+      with PC.X_no_match -> (nt_sexpr 'w' s);;
 
       let rec concate_sexp e tuple = match tuple with 
   |(exp,[])->List.concat [[e];[exp]]
@@ -625,10 +632,13 @@ let read_sexprs string =
         match (sexpr_comment charList) with 
         | (Nil,[]) ->[]
         | (e,[]) -> if e=Nil then [] else  [e]
-        | (e,s)-> (concate_sexp e (sexpr_comment s)) ;;
+        | (e,s)-> List.filter (fun s->s!=Nil)(concate_sexp e (sexpr_comment s)) ;;
 
   
-read_sexprs "5";;
+read_sexprs "1.6 ′(2)";;
+nt_sexpr 'w' (string_to_list "′(1)");;
+try nt_sexpr 'w' (string_to_list "1.6") with PC.X_no_match -> (Nil,[]);;
+
 
 
 let read_sexpr string = 
