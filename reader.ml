@@ -630,8 +630,8 @@ let read_sexpr string =
       with PC.X_no_match -> read_sexpr_tuple s ;;
 
       let rec concate_sexp e tuple = match tuple with 
-  |(exp,[])-> List.concat [[e]; [exp]]
-  |(exp,remain)-> concate_sexp exp (sexpr_comment remain);;
+  |(exp,[])->List.concat [[e];[exp]]
+  |(exp,remain)->List.concat[[e];(concate_sexp exp (sexpr_comment remain))];;
 
 let read_sexprs string = 
   let charList = (string_to_list string) in
@@ -641,7 +641,7 @@ let read_sexprs string =
         | (e,s)->  concate_sexp e (sexpr_comment s) ;;
      
         
-read_sexprs ";#1 3 ;#2  4";;
+read_sexprs ";#1 ;#2 3 4 5 6 7 3";;
 
 
 
