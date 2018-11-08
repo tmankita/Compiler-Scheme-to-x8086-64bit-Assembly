@@ -520,69 +520,63 @@ let build_string e =
     let (e,s) = (nt_Nil s) in
      ((),s);;
 
+
+     let make_commentLine = 
+      fun s ->
+        let (_,s) = (nt_commentLine s) in
+          (Nil,s);;
+
+
      let rec nt_sexpr = 
      function
-      |_-> PC.disj_list [make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list] 
+      |_-> PC.disj_list [make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_vector; make_commentLine] 
   
      and make_list =
       fun s->
-      let nt_list= (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')'))) in
+      let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')'))) in
       let ((left, (list_s, right)),s)= (nt_list s) in
-      ((List.fold_right  (fun sexp1 sexp2 -> Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;;
-
-  
+      ((List.fold_right  (fun sexp1 sexp2 -> Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
+      and make_vector = 
+      fun s->
+      let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')')))) in
+      let ((hash,(left, (list_s, right))),s1) = (nt_vector s) in
+        (Vector(list_s),s1) ;
+      and make_Quoted = 
+      fun s -> 
+      let nt_q1 = PC.word  "′" in
+      let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  in
+      let (sym_sexp,rest ) = (nt_Quoted s) in
+        let (name,sexpr)= sym_sexp in
+          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+      and make_QQuoted = 
+      fun s -> 
+      let nt_q2= PC.word "‘" in
+      let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  in
+      let (sym_sexp,rest ) = (nt_QQuoted s) in
+        let (name,sexpr)= sym_sexp in
+          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+      and make_UnquotedSpliced = 
+      fun s -> 
+      let nt_q3= PC.word  ",@" in
+      let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w') in
+      let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
+        let (name,sexpr)= sym_sexp in
+          Pair(Symbol(list_to_string name), Pair(sexpr, Nil))
+      and make_Unquoted = 
+      fun s -> 
+      let nt_q4= PC.word  "," in
+      let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) in
+      let (sym_sexp,rest ) = (nt_Unquoted s) in
+        let (name,sexpr)= sym_sexp in
+          Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
 
       nt_sexpr 'w' (string_to_list "(1 ( 1 ))") ;;
 
-  let make_commentLine = 
-  fun s ->
-    let (e,s) = (nt_commentLine s) in
-      ((),s);;
-
-      let nt_q1 = PC.word  "′";;
-      let nt_q2= PC.word  "‘";;
-      let nt_q3= PC.word  ",@";;
-      let nt_q4= PC.word  ",";;
-       
-      let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  ;;
-      let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  ;;
-      let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w')  ;;
-      let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) ;;
 
 
-      let make_Quoted = 
-        fun s -> 
-        let (sym_sexp,rest ) = (nt_Quoted s) in
-          let (name,sexpr)= sym_sexp in
-            Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
-        
-      
-      let make_QQuoted = 
-        fun s -> 
-        let (sym_sexp,rest ) = (nt_QQuoted s) in
-          let (name,sexpr)= sym_sexp in
-            Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
-        
-      
-      let make_UnquotedSpliced = 
-        fun s -> 
-        let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
-          let (name,sexpr)= sym_sexp in
-            Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
-      
-                  
-      let make_Unquoted = 
-        fun s -> 
-        let (sym_sexp,rest ) = (nt_Unquoted s) in
-          let (name,sexpr)= sym_sexp in
-            Pair(Symbol(list_to_string name), Pair(sexpr, Nil));;
 
-
-      let nt_SexprComment=make_spaced (PC.caten_list [nt_semicolon; _hashSymbol_]);;
+      let nt_SexprComment=make_spaced (PC.caten_list [_hashSymbol_;nt_semicolon ]);;
       let nt_dot = PC.char '.';;
-
-
-
 
 
 
@@ -591,22 +585,6 @@ let build_string e =
 let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
 
  
-(*let make_Dottedlist =
-fun s ->
-let (e,s)= (nt_Dottedlist s) in
-let twoList = build_list e in
-let oneList = List.concat [List.nth twoList 0 ; [' '] ;List.nth twoList 1] in 
- ( (List.fold_right  (fun sexp1 sexp2 ->  Pair(sexp1,sexp2))  (list_sexprs oneList)  ) Nil ,s);;*)
-
-
-
-(*make_Dottedlist (string_to_list "(234 5 6. 5)");;*)
-
-
-
-
-
-
 
 
 module Reader: sig
@@ -620,11 +598,6 @@ let normalize_scheme_symbol str =
 	(fun ch -> (ch = (lowercase_ascii ch)))
 	s) then str
   else Printf.sprintf "|%s|" str;;
-
-let read_sexpr string = 
-  try let (e,s) = (nt_sexpr 'w' (string_to_list string)) in e
-  with PC.X_no_match -> raise PC.X_no_match;;
-
   let read_sexpr_tuple list = let e  = (nt_sexpr 'w' list) in  e;;
 
   
@@ -651,11 +624,23 @@ let read_sexprs string =
   let charList = (string_to_list string) in
         match (sexpr_comment charList) with 
         | (Nil,[]) ->[]
-        | (e,[]) -> [e]
-        | (e,s)->  concate_sexp e (sexpr_comment s) ;;
+        | (e,[]) -> if e=Nil then [] else  [e]
+        | (e,s)-> (concate_sexp e (sexpr_comment s)) ;;
+
+  
+read_sexprs "5";;
+
+
+let read_sexpr string = 
+  try let list1 = (read_sexprs string) 
+  in
+  if (List.length list1 = 1) then (List.hd list1)
+  else raise X_this_should_not_happen  
+  with PC.X_no_match -> raise PC.X_no_match;;
+
+ 
      
         
-read_sexprs "1 ;#1 ;#2 3 4 5 6 7 3";;
 
 
 
