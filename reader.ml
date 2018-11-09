@@ -188,7 +188,7 @@ let test_string nt str =
 
 end;; (* end of struct PC *)
 
-(* end-of-input *)
+ (*end-of-input *)
 
 
 
@@ -273,45 +273,71 @@ end;; (* end of struct PC *)
  
       
 
-  let make_sign =PC.maybe (PC.one_of "+-");;
-     
-  let nt_HexInteger = PC.caten (_hashSymbol_) ((PC.caten (PC.caten (PC.char_ci 'x')
-                                                          (make_sign))
-                                                (PC.plus (PC.one_of_ci "0123456789abcdef"))));;
-
-  let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
-
-  let nt_integer= make_spaced (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  )));;
-
-let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
-
-let make_hex_number sign num = 
-  match sign with
-  | Some c -> if c = '-' then -1 * build_integer "0x" num
-              else build_integer "0x" num
-  |None -> build_integer "0x" num;;
-
-let make_decimal_number sign num =
-  match sign with
-  | Some c -> if c = '-' then  (-1 * build_integer "" num)
-              else build_integer "" num
-  |None -> build_integer "" num ;;
-
-(*this is a help function for make integer*)
-  let helpNumber (opt, sign) num = if opt = 'x' || opt = 'X' then make_hex_number sign num
-                                    else make_decimal_number sign num ;;
-  let correct_integer e s = 
-    let (symbol , rest) = e in
-    let (e , num ) = rest in
-        (Number(Int(helpNumber e num)),s);;
+    let make_sign =PC.maybe (PC.one_of "+-");;
+   
+  
+    let nt_e = PC.caten (PC.one_of_ci "e") ( PC.caten make_sign (PC.plus (PC.one_of "0123456789")));;
     
+      let nt_HexInteger = PC.caten (_hashSymbol_) ((PC.caten (PC.caten (PC.char_ci 'x')
+                                                              (make_sign))
+                                                    (PC.plus (PC.one_of_ci "0123456789abcdef"))));;
+    
+      let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
+    
+      let nt_integer= make_spaced (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e));;
+    
+    let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
+    
+    
+    nt_integer (string_to_list "2e-45");;
+    
+    
+    
+    let make_hex_number sign num = 
+      match sign with
+      | Some c -> if c = '-' then -1 * build_integer "0x" num
+                  else build_integer "0x" num
+      |None -> build_integer "0x" num;;
+    
+    let make_decimal_number sign num =
+      match sign with
+      | Some c -> if c = '-' then  (-1 * build_integer "" num)
+                  else build_integer "" num
+      |None -> build_integer "" num ;;
+    
+    (*this is a help function for make integer*)
+let helpNumber (opt, sign) num = if opt = 'x' || opt = 'X' then make_hex_number sign num
+                                  else make_decimal_number sign num ;;
+let correct_integer sign num rest = 
+      (Number(Int(helpNumber sign num)),rest);;
+
+
+nt_integer (string_to_list "23e-3");;     
+
+
+let correct_e sign num = 
+  let n = make_decimal_number sign num in
+  print_float (10. ** float_of_int n); 
+  
+  Number(Float(10. ** float_of_int n)) ;;
+
+let mul_number num1  num2 = 
+  match num1, num2 with
+  |Number(Int(n1)), Number(Float(n2))-> Number(Float((float_of_int n1)*.n2))
+  |_->raise X_this_should_not_happen;;
+
   let make_integer = 
     fun s ->
-    let (e, rest) = (nt_integer s) in
-    correct_integer e rest;;
+    let (((_, (e, num)), some_e), rest) = (nt_integer s) in
+    match some_e with 
+    |Some (_,(sign,e_num))-> let (num3,_)= correct_integer e num rest in
+                                
+                                  ((mul_number (num3) (correct_e sign e_num)),rest)
+
+    |None->   correct_integer e num rest;;
 
     
-let disj_sexpr p1 p2 =
+let disj_sexpr p1 p2 = 
   fun s ->
   try p1  s
   with PC.X_no_match -> p2  s;;
@@ -397,7 +423,7 @@ let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0
   let nt_CharPrefix = PC.caten _hashSymbol_ nt_slash;;
   let nt_VisibleSimpleChar =make_spaced (PC.caten nt_CharPrefix (PC.diff PC.nt_any PC.nt_whitespace));;
   let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word "newline"); (PC.word "nul"); (PC.word "page"); (PC.word "return"); (PC.word "space"); (PC.word "tab");(PC.word "double quote");(PC.word "\\");(PC.word "\"");(PC.word "f"); (PC.word "t"); (PC.word "r"); (PC.word "n")] ));;
-  let nt_HexChar= make_spaced (PC.caten nt_CharPrefix (PC.caten nt_x  (PC.one_of_ci "0123456789abcdef"))) ;;
+  let nt_HexChar= make_spaced (PC.caten nt_CharPrefix (PC.caten nt_x (PC.plus (PC.one_of_ci "0123456789abcdef")))) ;;
   
 
 
@@ -437,11 +463,11 @@ let make_NamedChar =
                  
   
 
- let make_HexChar = 
-  fun s->
-  let ((e,es),s)= (nt_HexChar s) in
-  let (x,hexChar)= es in
-    (Char(hexChar),s);;
+  let make_HexChar = 
+    fun s->
+    let (((hash, slash), (x, hex_num)), rest)= (nt_HexChar s) in
+    let char_val=   Char.chr ((int_of_string (String.concat  "" ["0x" ; list_to_string hex_num])))in
+      (Char(char_val),rest);;
 
     
 
@@ -534,13 +560,18 @@ let build_string e =
 
      let rec nt_sexpr = 
      function
-      |_-> PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] 
+      |_-> PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_Dottedlist; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] 
   
      and make_list =
       fun s->
       let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')'))) in
       let ((left, (list_s, right)),s)= (nt_list s) in
-      ((List.fold_right  (fun sexp1 sexp2 -> Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
+      ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
+      and make_Dottedlist =
+      fun s->
+      let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ')'))))) in
+      let ((left, (list_s,( dot, ( sexpr , right)))),s)= (nt_list s) in
+      ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (Pair(sexpr,Nil)))  ,s) ;
       and make_vector = 
       fun s->
       let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')')))) in
@@ -598,7 +629,8 @@ module Reader: sig
 end
 
 = struct
-let normalize_scheme_symbol str =
+
+  let normalize_scheme_symbol str =
   let s = string_to_list str in
   if (andmap
 	(fun ch -> (ch = (lowercase_ascii ch)))
@@ -648,15 +680,12 @@ let read_sexpr string =
   else raise X_this_should_not_happen  
   with PC.X_no_match -> raise PC.X_no_match;;
 
- 
-     
-        
-
-
-
-
 
 
 end;; (* struct Reader *)
+
+
+
+Reader.read_sexprs "(3 ;jahs\n .5)";;
 
 
