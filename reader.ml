@@ -236,7 +236,15 @@ end;; (* end of struct PC *)
  let charList_to_left_number b charList minus = List.fold_left (fun num acc -> b *. num +. acc ) 0.0 (List.map (fun x->  float_of_int((int_of_char x)-(int_of_char minus)) ) charList) ;;
  let charList_to_right_number b charList minus = (List.fold_right (fun num acc ->   num  +. acc/.b )  (List.map (fun x-> float_of_int((int_of_char x)-(int_of_char minus)) ) charList) 0.0)/. b;;
  
-  let _space_ =       (*add more kind of spaces*)
+ let lowercase_ascii_help  =
+  let delta = int_of_char 'A' - int_of_char 'a' in
+  fun ch ->
+  if ('A' <= ch && ch <= 'Z')
+  then char_of_int ((int_of_char ch) - delta)
+  else ch;;
+
+
+  let _space_ =    
     PC.const (fun ch -> ch <= ' ');;
   
   let make_enclosed _l_ _p_ _r_ =
@@ -258,7 +266,7 @@ end;; (* end of struct PC *)
   let _hashSymbol_ =
     PC.char '#';;
 
-  let _boolean_ = make_spaced_from_left (PC.caten _hashSymbol_ (PC.one_of_ci "tf"));;
+  let _boolean_ = make_spaced (PC.caten _hashSymbol_ (PC.one_of_ci "tf"));;
 
   let correct_boolean e = 
     let ( symbol , be) = e in         
@@ -270,8 +278,6 @@ end;; (* end of struct PC *)
     fun s->
     let (e , s) = (_boolean_ s) in 
     (correct_boolean e,s);;
- 
-      
 
     let make_sign =PC.maybe (PC.one_of "+-");;
    
@@ -288,10 +294,7 @@ end;; (* end of struct PC *)
     
     let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
     
-    
-    nt_integer (string_to_list "2e-45");;
-    
-    
+  
     
     let make_hex_number sign num = 
       match sign with
@@ -310,9 +313,6 @@ let helpNumber (opt, sign) num = if opt = 'x' || opt = 'X' then make_hex_number 
                                   else make_decimal_number sign num ;;
 let correct_integer sign num rest = 
       (Number(Int(helpNumber sign num)),rest);;
-
-
-nt_integer (string_to_list "23e-3");;     
 
 
 let correct_e sign num = 
@@ -368,7 +368,6 @@ let build_float sign left right=
 let correct_floating_point sign left_num right_num s = 
      (Number(Float(build_float sign (List.map lowercase_ascii left_num) (List.map lowercase_ascii right_num))),s);;
     
-nt_floating_point (string_to_list "3.14e-9");;
 
 let make_floating_point = 
   fun s->
@@ -380,7 +379,6 @@ let make_floating_point =
 
   |None->    correct_floating_point sign left_num right_num rest;;
   
-  make_floating_point (string_to_list "3.14e+9");;
   
 
  let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
@@ -420,11 +418,11 @@ let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0
 
 
   let nt_slash = PC.char '\\';;
-  let nt_x = PC.char 'x';;
+  let nt_x = PC.char_ci 'x';;
 
   let nt_CharPrefix = PC.caten _hashSymbol_ nt_slash;;
   let nt_VisibleSimpleChar =make_spaced (PC.caten nt_CharPrefix (PC.diff PC.nt_any PC.nt_whitespace));;
-  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word "newline"); (PC.word "nul"); (PC.word "page"); (PC.word "return"); (PC.word "space"); (PC.word "tab");(PC.word "double quote");(PC.word "\\");(PC.word "\"");(PC.word "f"); (PC.word "t"); (PC.word "r"); (PC.word "n")] ));;
+  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word_ci "newline"); (PC.word_ci "nul"); (PC.word_ci "page"); (PC.word "return"); (PC.word_ci "space"); (PC.word "tab");(PC.word "double quote");(PC.word_ci "\\");(PC.word "\"");(PC.word_ci "f"); (PC.word "t"); (PC.word_ci "r"); (PC.word_ci "n")] ));;
   let nt_HexChar= make_spaced (PC.caten nt_CharPrefix (PC.caten nt_x (PC.plus (PC.one_of_ci "0123456789abcdef")))) ;;
   
 
@@ -441,11 +439,11 @@ let correct_char ascii = Char(Char.chr ascii);;
 
 let build_NamedChar e s =
   let (prefix,namedChar) = e in
-  match  list_to_string namedChar with
-  | "newline"  -> (correct_char 010 ,s)
-  |"n" -> (correct_char 010 ,s)
+  match  list_to_string (List.map (fun x -> (lowercase_ascii_help x)) namedChar) with
+  |"newline"  -> (correct_char 010 ,s)
+  |"n" ->   (correct_char 010 ,s)
   |"page" -> (correct_char 012 ,s)
-  | "f" -> (correct_char 012 ,s)
+  |"f" -> (correct_char 012 ,s)
   |"return" -> (correct_char 013 ,s)
   |"r"-> (correct_char 013 ,s)
   |"tab" ->(correct_char 009 ,s)
@@ -455,6 +453,7 @@ let build_NamedChar e s =
   |"double qoute" ->(correct_char 034 ,s)
   |"\"" ->(correct_char 034 ,s)
   |"nul" ->(correct_char 000 ,s)
+  |"space" ->(correct_char 032 ,s)
   | _-> raise PC.X_no_match;;
 
 let make_NamedChar =
@@ -462,51 +461,52 @@ let make_NamedChar =
   let (e,s)= (nt_NamedChar s) in 
   build_NamedChar e s;;
 
-                 
-  
 
   let make_HexChar = 
     fun s->
-    let (((hash, slash), (x, hex_num)), rest)= (nt_HexChar s) in
+    let ((_, (x, hex_num)), rest)= (nt_HexChar s) in
     let char_val=   Char.chr ((int_of_string (String.concat  "" ["0x" ; list_to_string hex_num])))in
       (Char(char_val),rest);;
 
     
 
 
-let make_Char = PC.disj_list [make_VisibleSimpleChar; make_HexChar; make_NamedChar];;
+let make_Char = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ];;
 
 let nt_semicolon= PC.char ';';; 
   
   let nt_slash_x =  PC.caten nt_slash (nt_x);;
   
-  let nt_StringHexChar = make_spaced( PC.caten (PC.caten nt_slash_x (PC.plus (PC.one_of_ci "0123456789abcdef"))) nt_semicolon);;
+  let nt_StringHexChar = ( PC.caten (PC.caten nt_slash_x (PC.plus (PC.one_of_ci "0123456789abcdef"))) nt_semicolon);;
   
-  let nt_StringMetaChar = make_spaced (PC.disj_list [(PC.word "\\\""); (PC.word "\\\\"); (PC.word "\\\\t");(PC.word "\\\\f");(PC.word "\\\\n");(PC.word "\\\\r")] );;
-  
-  let nt_StringLiteralChar = make_spaced(PC.diff PC.nt_any (PC.one_of "\\\""));;
+  let nt_StringMetaChar =  (PC.disj_list [(PC.word "\\\""); (PC.word "\\\\"); (PC.word_ci "\\t");(PC.word_ci "\\f");(PC.word_ci "\\n");(PC.word_ci "\\r")] );;  
+  let nt_StringLiteralChar = (PC.diff PC.nt_any (PC.one_of "\\\""));;
 
 
-   let make_StringHexChar= 
+  let make_StringHexChar= 
     fun s->
     let (e,s)= (nt_StringHexChar s) in
     let ((prefix, hexNumber), semicolon) = e in
-    (hexNumber,s);;
+    let string_val= Char.chr ((int_of_string (String.concat  "" ["0x" ; list_to_string hexNumber])))in   
+    ([string_val],s);;
 
   let make_StringLiteralChar= 
     fun s->
     let (e,s)= (nt_StringLiteralChar s) in
      ([e],s);;
 
+     
+
      let build_StringMetaChar e s =
-     match list_to_string e with
-     |"n" -> (['\n'],s)
-     |"f" -> ( ['\\';'f'],s)
-     |"r"-> (['\r'],s)
-     |"t"->(['\t'],s)
-     |"\\"->(['\\'],s)
-     |"\\\"" ->(['\"'],s)
-     |_-> ([],s);;
+      match list_to_string (List.map (fun x -> (lowercase_ascii_help x)) e) with 
+      
+      |"\\n" -> (['\n'],s)
+      |"\\f" -> ([Char.chr 012],s)
+      |"\\r"-> (['\r'],s)
+      |"\\t"->(['\t'],s)
+      |"\\\\"->(['\\'],s)
+      |"\\\"" ->(['\"'],s)
+      |_-> ([],s);;
 
   let make_StringMetaChar = 
     fun s->
@@ -525,13 +525,13 @@ let nt_semicolon= PC.char ';';;
   
 let build_string e = 
   let (q_1, (sen, q_2)) = e in
-  String (String.concat "" ["\"";list_to_string (List.map (fun l -> (List.nth l 0)) sen);"\""]);;
+  String (String.concat "" [list_to_string (List.map (fun l -> (List.nth l 0)) sen)]);;
 
   let make_String =
     fun s->
     let (e,s)=  (nt_String s) in
      ((build_string e),s);;
-
+     nt_String (string_to_list "\"this 3\"");;
   let nt_endOfLine = 
      PC.char '\n' ;;
      
@@ -560,7 +560,15 @@ let build_string e =
       |[]->(Nil,[])
       |_->raise PC.X_no_match;;
 
+
+       
+      let nt_close_par =make_spaced( PC.one_of ")]");;
+      let nt_open_par= make_spaced (PC.one_of "([");;
+      let nt_close_all_par= make_spaced (PC.word "...");;
+
+
      let rec nt_sexpr = 
+      
      function
       |_-> PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_Dottedlist; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] 
   
@@ -577,7 +585,7 @@ let build_string e =
       let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ']'))))) in
       let nt_DottedSqOrCy= PC.disj_list [nt_DottedList; nt_square_DottedList] in
       let ((left, (list_s,( dot, ( sexpr , right)))),s)= (nt_DottedSqOrCy s) in
-      ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (Pair(sexpr,Nil)))  ,s) ;
+      ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (sexpr))  ,s) ;
       and make_vector = 
       fun s->
       let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')')))) in
@@ -585,47 +593,40 @@ let build_string e =
         (Vector(list_s),s1) ;
       and make_Quoted = 
       fun s -> 
-      let nt_q1 = PC.word  "′" in
+      let nt_q1 = PC.word  "'" in
       let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  in
       let (sym_sexp,rest ) = (nt_Quoted s) in
         let (name,sexpr)= sym_sexp in
-          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
+          (Pair(Symbol("quote"), Pair(sexpr, Nil)),rest) ;
       and make_QQuoted = 
       fun s -> 
-      let nt_q2= PC.word "‘" in
+      let nt_q2= PC.word "`" in
       let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  in
       let (sym_sexp,rest ) = (nt_QQuoted s) in
         let (name,sexpr)= sym_sexp in
-          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
+          (Pair(Symbol("quasiquote"), Pair(sexpr, Nil)),rest) ;
       and make_UnquotedSpliced = 
       fun s -> 
       let nt_q3= PC.word  ",@" in
       let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w') in
       let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
         let (name,sexpr)= sym_sexp in
-          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest) ;
+          (Pair(Symbol("unquote-splicing"), Pair(sexpr, Nil)),rest) ;
       and make_Unquoted = 
       fun s -> 
       let nt_q4= PC.word  "," in
       let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) in
       let (sym_sexp,rest ) = (nt_Unquoted s) in
         let (name,sexpr)= sym_sexp in
-          (Pair(Symbol(list_to_string name), Pair(sexpr, Nil)),rest);;
-
-      nt_sexpr 'w' (string_to_list "(1 ( 1 ))") ;;
-
-
-
+          (Pair(Symbol("unquote"), Pair(sexpr, Nil)),rest);;
+    
 
       let nt_SexprComment=make_spaced (PC.caten_list [_hashSymbol_;nt_semicolon ]);;
       let nt_dot = PC.char '.';;
 
 
 
-
-
 let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
-
  
 
 
@@ -642,8 +643,6 @@ end
 	(fun ch -> (ch = (lowercase_ascii ch)))
 	s) then str
   else Printf.sprintf "|%s|" str;;
-
- 
 
   
   let rec sexpr_comment  =  
@@ -677,6 +676,7 @@ let read_sexpr string =
   try let list1 = (read_sexprs string) 
   in
   if (List.length list1 = 1) then (List.hd list1)
+  else if (List.length list1 = 0) then Nil
   else raise X_this_should_not_happen  
   with PC.X_no_match -> raise PC.X_no_match;;
 
@@ -686,6 +686,9 @@ end;; (* struct Reader *)
 
 
 
-Reader.read_sexprs "[3 ;jahs\n 5]";;
+
+Reader.read_sexprs "'#t";;
+
+    
 
 
