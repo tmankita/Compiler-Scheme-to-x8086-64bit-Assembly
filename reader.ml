@@ -551,8 +551,8 @@ let build_string e =
 
      let make_commentLine = 
       fun s ->
-        let (_,s) = (nt_commentLine s) in
-          (Nil,s);;
+        let (_,s1) = (nt_commentLine s) in
+          (Nil,s1);;
 
      let make_empty= 
       fun s-> 
@@ -581,10 +581,10 @@ let build_string e =
       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
       and make_Dottedlist =
       fun s->
-      let nt_DottedList= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ')'))))) in
-      let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ']'))))) in
+      let nt_DottedList= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (PC.caten (PC.star make_commentLine) (PC.caten (nt_sexpr 's') (PC.star make_commentLine) )) (PC.char ')'))))) in
+      let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (PC.caten (PC.star make_commentLine) (PC.caten (nt_sexpr 's') (PC.star make_commentLine))) (PC.char ']'))))) in
       let nt_DottedSqOrCy= PC.disj_list [nt_DottedList; nt_square_DottedList] in
-      let ((left, (list_s,( dot, ( sexpr , right)))),s)= (nt_DottedSqOrCy s) in
+      let ((left, (list_s,( dot, (( nil_l1 , (sexpr,nil_l2 )),right)))),s)= (nt_DottedSqOrCy s) in
       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (sexpr))  ,s) ;
       and make_vector = 
       fun s->
@@ -624,7 +624,7 @@ let build_string e =
       let nt_SexprComment=make_spaced (PC.caten_list [_hashSymbol_;nt_semicolon ]);;
       let nt_dot = PC.char '.';;
 
-
+    
 
 let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
  
@@ -655,7 +655,9 @@ end
     fun s->
       try let (e,s1) = (nt_SexprComment s) in 
       let rest_sexprs = (sexpr_comment s1) in
+      
       match rest_sexprs with
+      |(Nil,s2)-> (sexpr_comment (List.concat [['#';';'];s2]))
       |(e,[])-> Nil,[]
       |(e,s2) -> (sexpr_comment s2)
       with PC.X_no_match -> (nt_sexpr 'w' s);;
@@ -685,10 +687,30 @@ let read_sexpr string =
 end;; (* struct Reader *)
 
 
+Reader.read_sexpr "#;#f #t";;
+Reader.read_sexpr "#;#f #f";;
+Reader.read_sexpr "#; #t #f ";;
+Reader.read_sexpr "#;#;#; #t #F #F #T";;
+Reader.read_sexpr "#;#; 3432432 3.45345 #t ";;
+Reader.read_sexpr " #; \"DSDSDD\" ;DSFSDFSDDSF\n #f ";;
+Reader.read_sexpr "#; #\\h #\\a";;
+Reader.read_sexpr "#; \"dflk4dl#@EDS \" #;#x-10.99  -10";;
+Reader.read_sexprs "#; #;   ;fddsfdsf\n #; 10 10.10 #xA.A -34324324324324";;
+Reader.read_sexpr "#; \"Thisdssadsadis a string\" \"This is a string\"";;
+Reader.read_sexpr "#; \"This is a str#; #; ;ing with \\\\ \" \"This is a string with \\\"";;
+Reader.read_sexpr "a";;
+Reader.read_sexpr "#; dssdcve3232 #; vbvcc4gfdgd aaaa";;
+Reader.read_sexpr "( #; dfdsfdsf #t )";;
+Reader.read_sexpr "( #; #; #; #; a b c d \"this\" )";; 
+Reader.read_sexpr "( #; 342342 #; \"dfdsf\" 37392.39382 )";;
+Reader.read_sexpr "( #; #F #; #T #\\c )";;
+Reader.read_sexpr "( #\\c #; #\\5 37392.39382 #; 343242 )";;
+Reader.read_sexpr "( #\\c 37392.39382 #;#;#; #xA \"this\" 10.10 37392 )";;
+Reader.read_sexpr "( #\\c 37392.39382 #; #xA ;DSFDSFDSFDS\n 37392 \"this\" )";;
+Reader.read_sexpr "(#\\c 37392.39382 37392 #; \"thfdsdfdsdsfdsfs\" \"this\" ;dfdsfdsfdsf#t)";;
+Reader.read_sexpr "( #\\c 37392.39382 . 37392 )";;
+Reader.read_sexpr "( #\\c 37392.39382 37392 ;fsdfds#$#$#%$#\n . #; 423423 #;24324 \"this)";;
+Reader.read_sexpr "(#\\c 37392.39382 37392 \"this\" . ;324324DSFDSFSD\n #; ;asdasdasd\n #t)";;
 
-
-Reader.read_sexprs "'#t";;
-
-    
 
 
