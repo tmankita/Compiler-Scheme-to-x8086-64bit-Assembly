@@ -317,13 +317,12 @@ nt_integer (string_to_list "23e-3");;
 
 let correct_e sign num = 
   let n = make_decimal_number sign num in
-  print_float (10. ** float_of_int n); 
-  
   Number(Float(10. ** float_of_int n)) ;;
 
 let mul_number num1  num2 = 
   match num1, num2 with
   |Number(Int(n1)), Number(Float(n2))-> Number(Float((float_of_int n1)*.n2))
+  |Number(Float(n1)),Number(Float(n2))-> Number(Float(n1*.n2))
   |_->raise X_this_should_not_happen;;
 
   let make_integer = 
@@ -351,9 +350,8 @@ let decimal_point =
 
 let nt_right_side_floating_point = PC.caten decimal_point (PC.plus (PC.one_of "0123456789"));;
 
-let nt_floating_point= make_spaced (PC.caten nt_decimal nt_right_side_floating_point);;
+let nt_floating_point= make_spaced (PC.caten (PC.caten nt_decimal nt_right_side_floating_point) (PC.maybe nt_e));;
 
-nt_floating_point (string_to_list "5.34                     ");;
 
 let makeLeftSide left =  charList_to_left_number left;;
 let makeRightSide right= charList_to_right_number right;; 
@@ -367,18 +365,22 @@ let build_float sign left right=
                 else raise PC.X_no_match;;
 
 (*need to check about zeros after decimal point like -102.000000000000001*)
-let correct_floating_point e s = 
-  let (left_side, right_side) = e in
-   let (sign, left_num) = left_side in
-    let (point, right_num) = right_side in
+let correct_floating_point sign left_num right_num s = 
      (Number(Float(build_float sign (List.map lowercase_ascii left_num) (List.map lowercase_ascii right_num))),s);;
     
+nt_floating_point (string_to_list "3.14e-9");;
 
 let make_floating_point = 
   fun s->
-  let ( e , rest ) = (nt_floating_point s) in
-   correct_floating_point e rest;;
+  let ( (((sign, left_num), (dot,right_num)), some_e) , rest ) = (nt_floating_point s) in
+  match some_e with 
+  |Some (_,(sign_e,e_num))-> let (num3,_)= correct_floating_point sign left_num right_num rest in
+                              
+                                ((mul_number (num3) (correct_e sign_e e_num)),rest)
+
+  |None->    correct_floating_point sign left_num right_num rest;;
   
+  make_floating_point (string_to_list "3.14e+9");;
   
 
  let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
@@ -405,7 +407,7 @@ let make_floating_point =
 
 let make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer];;
 
-let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_"));;
+let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:"));;
 
  let correct_symbol symbol s = 
   (Symbol(list_to_string (List.map lowercase_ascii symbol )),s);;
@@ -565,12 +567,16 @@ let build_string e =
      and make_list =
       fun s->
       let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')'))) in
-      let ((left, (list_s, right)),s)= (nt_list s) in
+      let nt_square_list=make_spaced (PC.caten (PC.char '[') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ']'))) in
+      let nt_sqOrCy= PC.disj_list [nt_list; nt_square_list] in
+      let ((left, (list_s, right)),s)= (nt_sqOrCy s) in
       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
       and make_Dottedlist =
       fun s->
-      let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ')'))))) in
-      let ((left, (list_s,( dot, ( sexpr , right)))),s)= (nt_list s) in
+      let nt_DottedList= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ')'))))) in
+      let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ']'))))) in
+      let nt_DottedSqOrCy= PC.disj_list [nt_DottedList; nt_square_DottedList] in
+      let ((left, (list_s,( dot, ( sexpr , right)))),s)= (nt_DottedSqOrCy s) in
       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (Pair(sexpr,Nil)))  ,s) ;
       and make_vector = 
       fun s->
@@ -666,12 +672,6 @@ let read_sexprs string =
         | (e,[]) -> if e=Nil then [] else  [e]
         | (e,s)-> List.filter (fun s->s!=Nil)(concate_sexp e (sexpr_comment s)) ;;
 
-  
-read_sexprs "1.6 ′(2)";;
-nt_sexpr 'w' (string_to_list "′(1)");;
-try nt_sexpr 'w' (string_to_list "1.6") with PC.X_no_match -> (Nil,[]);;
-
-
 
 let read_sexpr string = 
   try let list1 = (read_sexprs string) 
@@ -686,6 +686,6 @@ end;; (* struct Reader *)
 
 
 
-Reader.read_sexprs "(3 ;jahs\n .5)";;
+Reader.read_sexprs "[3 ;jahs\n 5]";;
 
 
