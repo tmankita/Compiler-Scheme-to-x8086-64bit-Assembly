@@ -1,198 +1,5 @@
 
-(*--------------------------pc.ml--------------------------------------------------------*)
-(* pc.ml
- * A parsing-combinators package for ocaml
- *
- * Prorammer: Mayer Goldberg, 2018
- *)
 
-(* general list-processing procedures *)
-
-let rec ormap f s =
-  match s with
-  | [] -> false
-  | car :: cdr -> (f car) || (ormap f cdr);;
-
-let rec andmap f s =
-  match s with
-  | [] -> true
-  | car :: cdr -> (f car) && (andmap f cdr);;	  
-
-let lowercase_ascii  =
-  let delta = int_of_char 'A' - int_of_char 'a' in
-  fun ch ->
-  if ('A' <= ch && ch <= 'Z')
-  then char_of_int ((int_of_char ch) - delta)
-  else ch;;
-
-let string_to_list str =
-  let rec loop i limit =
-    if i = limit then []
-    else (String.get str i) :: (loop (i + 1) limit)
-  in
-  loop 0 (String.length str);;
-
-let list_to_string s =
-  String.concat "" (List.map (fun ch -> String.make 1 ch) s);;
-
-module PC = struct
-
-(* the parsing combinators defined here *)
-  
-exception X_not_yet_implemented;;
-
-exception X_no_match;;
-
-let const pred =
-  function 
-  | [] -> raise X_no_match
-  | e :: s ->
-     if (pred e) then (e, s)
-     else raise X_no_match;;
-
-let caten nt1 nt2 s =
-  let (e1, s) = (nt1 s) in
-  let (e2, s) = (nt2 s) in
-  ((e1, e2), s);;
-
-let pack nt f s =
-  let (e, s) = (nt s) in
-  ((f e), s);;
-
-let nt_epsilon s = ([], s);;
-
-let caten_list nts =
-  List.fold_right
-    (fun nt1 nt2 ->
-     pack (caten nt1 nt2)
-	  (fun (e, es) -> (e :: es)))
-    nts
-    nt_epsilon;;
-
-let disj nt1 nt2 =
-  fun s ->
-  try (nt1 s)
-  with X_no_match -> (nt2 s);;
-
-let nt_none _ = raise X_no_match;;
-  
-let disj_list nts = List.fold_right disj nts nt_none;;
-
-let delayed thunk s =
-  thunk() s;;
-
-let nt_end_of_input = function
-  | []  -> ([], [])
-  | _ -> raise X_no_match;;
-
-let rec star nt s =
-  try let (e, s) = (nt s) in
-      let (es, s) = (star nt s) in
-      (e :: es, s)
-  with X_no_match -> ([], s);;
-
-let plus nt =
-  pack (caten nt (star nt))
-       (fun (e, es) -> (e :: es));;
-
-let guard nt pred s =
-  let ((e, _) as result) = (nt s) in
-  if (pred e) then result
-  else raise X_no_match;;
-  
-let diff nt1 nt2 s =
-  match (let result = nt1 s in
-	 try let _ = nt2 s in
-	     None
-	 with X_no_match -> Some(result)) with
-  | None -> raise X_no_match
-  | Some(result) -> result;;
-
-let not_followed_by nt1 nt2 s =
-  match (let ((_, s) as result) = (nt1 s) in
-	 try let _ = (nt2 s) in
-	     None
-	 with X_no_match -> (Some(result))) with
-  | None -> raise X_no_match
-  | Some(result) -> result;;
-	  
-let maybe nt s =
-  try let (e, s) = (nt s) in
-      (Some(e), s)
-  with X_no_match -> (None, s);;
-
-(* useful general parsers for working with text *)
-
-let make_char equal ch1 = const (fun ch2 -> equal ch1 ch2);;
-
-let char = make_char (fun ch1 ch2 -> ch1 = ch2);;
-
-let char_ci =
-  make_char (fun ch1 ch2 ->
-	     (lowercase_ascii ch1) =
-	       (lowercase_ascii ch2));;
-
-let make_word char str = 
-  List.fold_right
-    (fun nt1 nt2 -> pack (caten nt1 nt2) (fun (a, b) -> a :: b))
-    (List.map char (string_to_list str))
-    nt_epsilon;;
-
-let word = make_word char;;
-
-let word_ci = make_word char_ci;;
-
-let make_one_of char str =
-  List.fold_right
-    disj
-    (List.map char (string_to_list str))
-    nt_none;;
-
-let one_of = make_one_of char;;
-
-let one_of_ci = make_one_of char_ci;;
-
-let nt_whitespace = const (fun ch -> ch <= ' ');;
-
-let make_range leq ch1 ch2 (s : char list) =
-  const (fun ch -> (leq ch1 ch) && (leq ch ch2)) s;;
-
-let range = make_range (fun ch1 ch2 -> ch1 <= ch2);;
-
-let range_ci =
-  make_range (fun ch1 ch2 ->
-	      (lowercase_ascii ch1) <=
-		(lowercase_ascii ch2));;
-
-let nt_any (s : char list) = const (fun ch -> true) s;;
-
-let trace_pc desc nt s =
-  try let ((e, s') as args) = (nt s)
-      in
-      (Printf.printf ";;; %s matched the head of \"%s\", and the remaining string is \"%s\"\n"
-		     desc
-		     (list_to_string s)
-		     (list_to_string s') ;
-       args)
-  with X_no_match ->
-    (Printf.printf ";;; %s failed on \"%s\"\n"
-		   desc
-		   (list_to_string s) ;
-     raise X_no_match);;
-
-(* testing the parsers *)
-
-let test_string nt str =
-  let (e, s) = (nt (string_to_list str)) in
-  (e, (Printf.sprintf "->[%s]" (list_to_string s)));;
-
-end;; (* end of struct PC *)
-
- (*end-of-input *)
-
-
-
-(*--------------------------end pc.ml-----------------------------------------------------*)
 
 
 (* reader.ml
@@ -220,11 +27,14 @@ end;; (* end of struct PC *)
    | Pair of sexpr * sexpr
    | Vector of sexpr list;;
  
+
+
  let rec sexpr_eq s1 s2 =
    match s1, s2 with
    | Bool(b1), Bool(b2) -> b1 = b2
    | Nil, Nil -> true
-   | Number(n1), Number(n2) -> n1 = n2
+   | Number(Float f1), Number(Float f2) -> abs_float(f1 -. f2) < 0.001
+   | Number(Int n1), Number(Int n2) -> n1 = n2
    | Char(c1), Char(c2) -> c1 = c2
    | String(s1), String(s2) -> s1 = s2
    | Symbol(s1), Symbol(s2) -> s1 = s2
@@ -233,6 +43,22 @@ end;; (* end of struct PC *)
    | _ -> false;;
    
     
+  
+
+module Reader: sig
+  val read_sexpr : string -> sexpr
+  val read_sexprs : string -> sexpr list
+end
+
+= struct
+
+  let normalize_scheme_symbol str =
+  let s = string_to_list str in
+  if (andmap
+	(fun ch -> (ch = (lowercase_ascii ch)))
+	s) then str
+  else Printf.sprintf "|%s|" str;;
+  
   let lowercase_ascii_help  =
     let delta = int_of_char 'A' - int_of_char 'a' in
     fun ch ->
@@ -271,10 +97,7 @@ end;; (* end of struct PC *)
       else if (be = 'f' || be ='F') then Bool(false)
       else raise PC.X_no_match;;  
   
-    let make_boolean = 
-      fun s->
-      let (e , s) = (_boolean_ s) in 
-      (correct_boolean e,s);;
+    
   
       let make_sign =PC.maybe (PC.one_of "+-");;
      
@@ -402,18 +225,14 @@ end;; (* end of struct PC *)
     ((Number(Float(build_float_hex  sign left_Hexnumber right_Hexnumber))),s);;
   
   
-  let make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer];;
+  
   
   let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:"));;
   
    let correct_symbol symbol s = 
     (Symbol(list_to_string (List.map lowercase_ascii symbol )),s);;
   
-   let make_symbol = 
-    fun s->
-    let ( e , rest ) = (nt_symbol s) in
-     correct_symbol e rest;;
-  
+   
   
   
     let nt_slash = PC.char '\\';;
@@ -470,7 +289,7 @@ end;; (* end of struct PC *)
       
   
   
-  let make_Char = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ];;
+  
   
   let nt_semicolon= PC.char ';';; 
     
@@ -491,6 +310,7 @@ end;; (* end of struct PC *)
   
     let make_StringLiteralChar= 
       fun s->
+     
       let (e,s)= (nt_StringLiteralChar s) in
        ([e],s);;
   
@@ -524,10 +344,7 @@ end;; (* end of struct PC *)
     let (q_1, (sen, q_2)) = e in
     String (String.concat "" [list_to_string (List.map (fun l -> (List.nth l 0)) sen)]);;
   
-    let make_String =
-      fun s->
-      let (e,s)=  (nt_String s) in
-       ((build_string e),s);;
+
   
   
     let nt_endOfLine = 
@@ -541,30 +358,156 @@ end;; (* end of struct PC *)
     
     let nt_Nil= make_spaced (PC.caten_list [PC.char '('; (PC.pack (PC.star (PC.disj_list [_space_ ; (PC.pack nt_commentLine (fun s-> 's'))])) (fun s-> 'e' )); PC.char ')']);;
   
-    let make_Nil = 
-      fun s->
-      let (e,s) = (nt_Nil s) in
-       (Nil,s);;
-  
-  
-       let make_empty= 
-        fun s-> 
-        match s with
-        |[]->(Nil,[])
-        |_->raise PC.X_no_match;;
-  
-  
-        let nt_close_par =make_spaced( PC.one_of ")]");;
-        let nt_open_par= make_spaced (PC.one_of "([");;
-        let nt_close_all_par= make_spaced (PC.word "...");;
-  
+    let rec nt_sexpr_three_dotted = 
+      function 
+       |_->(PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD; make_NumberD; make_StringD ; make_symbolD; make_DottedlistD;  make_listD;  make_vectorD; make_commentLineD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD;make_SexprComemntD] )
+   
+       and make_NilD = 
+         fun s->
+         let (e,s) = (nt_Nil s) in
+          (Nil,s)
+     
+     
+     and make_emptyD= 
+       fun s-> 
+       match s with
+       |[]->(Nil,[])
+       |_->raise PC.X_no_match
+
+
+       and make_StringD =
+         fun s->
+         let (e,s)=  (nt_String s) in
+          ((build_string e),s)
+
+     and make_CharD = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ]
+
+     and make_symbolD = 
+         fun s->
+         let ( e , rest ) = (nt_symbol s) in
+
+          correct_symbol e rest
+
+     and make_NumberD= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
+
+     and make_booleanD = 
+         fun s->
+         let (e , s) = (_boolean_ s) in 
+         (correct_boolean e,s)
+     and make_SexprComemntD = 
+     fun s->
+     let nt_se=make_spaced (PC.word "#;") in
+     let (e,s) = nt_se s in
+     let (void,rest) = nt_sexpr_three_dotted 's' s in 
+     match void,rest with
+     |_, ')'::e -> Nil,rest
+     |_, ']'::e -> Nil,rest
+     |_, '.'::e -> Nil,rest
+     |_,[]-> Nil,[]
+     |Nil, s -> (nt_sexpr_three_dotted 's' (List.concat [['#';';'];s]))
+     |_,t-> (nt_sexpr_three_dotted 's' t)
+     
+     and make_commentLineD = 
+     fun s ->
+       let (_,s1) = (nt_commentLine s) in
+       match s1 with
+       |[]->Nil,[]
+       |')'::e -> Nil,s1
+       |']'::e -> Nil,s1
+       |'.'::e -> Nil,s1
+       |_-> nt_sexpr_three_dotted 's' s1
+
+      and make_listD =
+       fun s->
+       let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (PC.maybe(PC.char ')')))) in
+       let nt_square_list=make_spaced (PC.caten (PC.char '[') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (PC.maybe(PC.char ']')))) in
+       let nt_sqOrCy= PC.disj_list [nt_list; nt_square_list] in
+       let ((left, (list_s, right)),s)= (nt_sqOrCy s) in
+       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
+       
+       and make_DottedlistD =
+       fun s->
+       let nt_DottedList= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr_three_dotted 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr_three_dotted 's') (PC.maybe(PC.char ')')))))) in
+       let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr_three_dotted 's')) (PC.caten (PC.not_followed_by (PC.char '.') (PC.char '.')) (PC.caten (nt_sexpr_three_dotted 's') (PC.maybe(PC.char ']')))))) in
+       let nt_DottedSqOrCy= PC.disj_list [nt_DottedList; nt_square_DottedList] in
+       let ((left, (list_s,( dot, (sexpr,right)))),s)= (nt_DottedSqOrCy s) in
+       ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (sexpr))  ,s) ;
+       
+       and make_vectorD = 
+       fun s->
+       let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (PC.maybe(PC.char ')'))))) in
+       let ((hash,(left, (list_s, right))),s1) = (nt_vector s) in
+         (Vector(list_s),s1) ;
+       
+        and make_QuotedD = 
+       fun s -> 
+       let nt_q1 = PC.word  "'" in
+       let nt_Quoted = PC.caten nt_q1 (nt_sexpr_three_dotted 'w')  in
+       let (sym_sexp,rest ) = (nt_Quoted s) in
+         let (name,sexpr)= sym_sexp in
+           (Pair(Symbol("quote"), Pair(sexpr, Nil)),rest) ;
+       
+           and make_QQuotedD = 
+       fun s -> 
+       let nt_q2= PC.word "`" in
+       let nt_QQuoted = PC.caten nt_q2 (nt_sexpr_three_dotted 'w')  in
+       let (sym_sexp,rest ) = (nt_QQuoted s) in
+         let (name,sexpr)= sym_sexp in
+           (Pair(Symbol("quasiquote"), Pair(sexpr, Nil)),rest) ;
+       and make_UnquotedSplicedD = 
+       fun s -> 
+       let nt_q3= PC.word  ",@" in
+       let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr_three_dotted 'w') in
+       let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
+         let (name,sexpr)= sym_sexp in
+           (Pair(Symbol("unquote-splicing"), Pair(sexpr, Nil)),rest) ;
+       and make_UnquotedD = 
+       fun s -> 
+       let nt_q4= PC.word  "," in
+       let nt_Unquoted = PC.caten nt_q4 (nt_sexpr_three_dotted 'w' ) in
+       let (sym_sexp,rest ) = (nt_Unquoted s) in
+         let (name,sexpr)= sym_sexp in
+           (Pair(Symbol("unquote"), Pair(sexpr, Nil)),rest);;
+
+
+           let three_dots= make_spaced (PC.word "...");;
        
        let rec nt_sexpr = 
        function
-        |_->(PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol; make_list; make_Dottedlist; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced;make_SexprComemnt] )
+        |_->(PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol;  make_list; make_Dottedlist; make_vector; make_commentLine;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced;make_SexprComemnt] )
     
+        and make_Nil = 
+          fun s->
+          let (e,s) = (nt_Nil s) in
+           (Nil,s)
       
+      
+      and make_empty= 
+        fun s-> 
+        match s with
+        |[]->(Nil,[])
+        |_->raise PC.X_no_match
 
+
+        and make_String =
+          fun s->
+          let (e,s)=  (nt_String s) in
+           ((build_string e),s)
+
+      and make_Char = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ]
+
+      and make_symbol = 
+          fun s->
+          let ( e , rest ) = (nt_symbol s) in
+
+           correct_symbol e rest
+
+      and make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
+
+      and make_boolean = 
+          fun s->
+          let (e , s) = (_boolean_ s) in 
+          (correct_boolean e,s)
       and make_SexprComemnt = 
       fun s->
       let nt_se=make_spaced (PC.word "#;") in
@@ -589,21 +532,23 @@ end;; (* end of struct PC *)
         |_-> nt_sexpr 's' s1
        and make_list =
         fun s->
-        let nt_list= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')'))) in
-        let nt_square_list=make_spaced (PC.caten (PC.char '[') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ']'))) in
+
+        let nt_list= make_spaced((PC.disj  (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (three_dots)))) (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.word ")"))) ) in
+        let nt_square_list=make_spaced (PC.disj (PC.caten (PC.char '[') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (three_dots))) (PC.caten (PC.char '[') (PC.caten (PC.star (nt_sexpr 's')) (PC.word "]"))) ) in
         let nt_sqOrCy= PC.disj_list [nt_list; nt_square_list] in
         let ((left, (list_s, right)),s)= (nt_sqOrCy s) in
         ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  Nil)  ,s) ;
         and make_Dottedlist =
         fun s->
-        let nt_DottedList= make_spaced (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ')'))))) in
-        let nt_square_DottedList= make_spaced (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr 's') (PC.char ']'))))) in
+        let nt_DottedList= make_spaced (PC.disj(PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr_three_dotted 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr_three_dotted 's') (three_dots)))))  (PC.caten (PC.char '(') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten ( (PC.char '.')) (PC.caten (nt_sexpr 's') (PC.word ")")))))  ) in
+        let nt_square_DottedList= make_spaced (PC.disj (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr_three_dotted 's')) (PC.caten (PC.char '.') (PC.caten (nt_sexpr_three_dotted 's') (three_dots))))) (PC.caten (PC.char '[') (PC.caten (PC.plus (nt_sexpr 's')) (PC.caten (PC.not_followed_by (PC.char '.') (PC.char '.')) (PC.caten (nt_sexpr 's') (PC.word "]"))))) ) in
         let nt_DottedSqOrCy= PC.disj_list [nt_DottedList; nt_square_DottedList] in
         let ((left, (list_s,( dot, (sexpr,right)))),s)= (nt_DottedSqOrCy s) in
+        
         ((List.fold_right  (fun sexp1 sexp2 -> if sexp1=Nil then sexp2 else Pair(sexp1,sexp2))  ( list_s)  (sexpr))  ,s) ;
         and make_vector = 
         fun s->
-        let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.char ')')))) in
+        let nt_vector= make_spaced (PC.disj (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (three_dots)))) (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.word ")")))) ) in
         let ((hash,(left, (list_s, right))),s1) = (nt_vector s) in
           (Vector(list_s),s1) ;
         and make_Quoted = 
@@ -639,22 +584,6 @@ end;; (* end of struct PC *)
   let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
    
  
-
-module Reader: sig
-  val read_sexpr : string -> sexpr
-  val read_sexprs : string -> sexpr list
-end
-
-= struct
-
-  let normalize_scheme_symbol str =
-  let s = string_to_list str in
-  if (andmap
-	(fun ch -> (ch = (lowercase_ascii ch)))
-	s) then str
-  else Printf.sprintf "|%s|" str;;
-  
-  
 let read_sexprs string = 
   let charList = (string_to_list string) in
 
