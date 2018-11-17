@@ -872,6 +872,147 @@ let rec expr_eq e1 e2 =
                        
 exception X_syntax_error;;
 
+
+
+let disj_expr nt1 nt2 =
+  fun s ->
+  try (nt1 s)
+  with X_syntax_error -> (nt2 s);;
+
+let nt_none _ = raise X_syntax_error;;
+  
+let disj_list_expr nts = List.fold_right disj_expr nts nt_none;;
+
+
+  
+let reserved_word_list =
+  ["and"; "begin"; "cond"; "define"; "else";
+   "if"; "lambda"; "let"; "let*"; "letrec"; "or";
+   "quasiquote"; "quote"; "set!"; "unquote";
+   "unquote-splicing"];;  
+
+
+
+Reader.read_sexpr "(or 1 2)";;
+
+ let rec make_expr () =
+   disj_list_expr [make_Const ; make_Variable; make_if; make_LambdaSimple; make_LambdaOpt;make_Applic; make_Or ]
+   
+  and make_Const = 
+    fun  sexpr->
+    match sexpr with
+    |Bool(c)-> Const(Sexpr(Bool(c)))
+    |Char(c)-> Const(Sexpr(Char(c)))
+    |Number(c)->Const(Sexpr(Number(c)))
+    |String(c)->Const(Sexpr(String(c)))
+    |Pair(Symbol("quote"),Pair(sexpr,Nil))->Const(Sexpr(sexpr))
+    |Pair(Symbol("unquote"),Pair(sexpr,Nil))->Const(Sexpr(sexpr))
+    |_->raise X_syntax_error
+
+
+   and make_Variable = 
+    fun sexpr->
+    match sexpr with
+    |Symbol(c)-> if (ormap (fun s-> (compare s c)= 0) reserved_word_list) = false then Var(c) 
+                  else raise X_syntax_error
+    |_-> raise X_syntax_error
+  
+  and make_test = 
+    fun sexpr->
+    match sexpr with
+    |Pair (test_,rest)-> (make_expr () test_),rest
+    |_-> raise X_syntax_error
+
+    and make_then = 
+    fun sexpr->
+    match sexpr with
+    |Pair (then_,rest)-> (make_expr () then_),rest
+    |_-> raise X_syntax_error
+
+
+    and make_else = 
+    fun sexpr->
+    
+    match sexpr with
+    |Nil -> Const(Void),Nil
+    |Pair (else_,rest)-> (make_expr () else_),rest
+    |_-> raise X_syntax_error
+     
+  and  make_if =
+    fun sexpr ->
+   
+    match sexpr with 
+    | Pair(Symbol("if"),rest)->  let (test_,rest1) = make_test rest in 
+                                let (then_,rest2)= make_then rest1  in
+                                let (else_,rest3)= make_else rest2 in
+                                If(test_,then_,else_)
+    |_-> raise X_syntax_error
+
+   and make_params = 
+   fun sexpr->
+   match sexpr with
+   |Nil->[]
+   |Pair (Symbol(c),rest)-> (List.concat [[c];(make_params rest )]) 
+   |_-> raise X_syntax_error
+
+    and make_LambdaSimple = 
+    fun sexpr->
+    
+    match sexpr with 
+    | Pair(Symbol("lambda"),Pair(params,Pair(body,Nil)))->  let params_ = make_params params in
+                                                            LambdaSimple(params_, make_expr () body)
+    |_-> raise X_syntax_error
+
+  and make_params_opt=
+  fun sexpr->
+
+  match sexpr with
+   |Pair(Symbol(c),Nil)-> [c],""
+   |Pair (Symbol(c),Symbol(s))-> [c],s
+   |Pair (Symbol(c),rest)-> let (params_list,opt)= make_params_opt rest in
+                                (List.concat [[c]; params_list]) ,opt
+   |_-> raise X_syntax_error
+
+
+    and make_LambdaOpt = 
+    fun sexpr ->
+
+    match sexpr with 
+    | Pair(Symbol("lambda"),Pair (Symbol(param),Pair(body,Nil)))-> LambdaOpt([],param,make_expr () body)
+    | Pair(Symbol("lambda"),Pair (params,Pair(body,Nil)))-> let (params_,opt_params)= make_params_opt params in
+                                                            LambdaOpt(params_,opt_params,make_expr () body)
+                                                      
+    |_->raise X_syntax_error
+
+    and make_list_sexprs_for_app = 
+    fun sexpr_list ->
+
+    match sexpr_list with
+    |Pair(sexpr,Nil) -> [make_expr () sexpr]
+    |Pair(sexpr1,sexpr2)-> List.concat [[(make_expr () sexpr1)] ; (make_list_sexprs_for_app sexpr2)]
+    |_-> raise X_syntax_error
+
+
+    and make_Applic = 
+    fun sexpr->
+
+    match sexpr with
+    |Pair(sexpr1,list_sexpr) ->let list_sexpr_ = make_list_sexprs_for_app list_sexpr in 
+                                Applic(make_expr () sexpr1 ,list_sexpr_ )
+    |_->raise X_syntax_error
+
+    and make_Or = 
+    fun sexpr->
+
+    match sexpr with
+    |Pair(Symbol("or"),list_sexpr) ->let list_sexpr_ = make_list_sexprs_for_app list_sexpr in 
+                                Or(list_sexpr_ )
+    |_->raise X_syntax_error;;
+      
+
+    make_expr () (Reader.read_sexpr "(or 1 2)") ;;
+
+
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
   val tag_parse_expressions : sexpr list -> expr list
@@ -879,11 +1020,6 @@ end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
 
-let reserved_word_list =
-  ["and"; "begin"; "cond"; "define"; "else";
-   "if"; "lambda"; "let"; "let*"; "letrec"; "or";
-   "quasiquote"; "quote"; "set!"; "unquote";
-   "unquote-splicing"];;  
 
 (* work on the tag parser starts here *)
 
