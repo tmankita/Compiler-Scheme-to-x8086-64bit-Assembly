@@ -893,10 +893,10 @@ let reserved_word_list =
 
 
 
-Reader.read_sexpr "(or 1 2)";;
+Reader.read_sexpr "(begin  3 1 #t)";;
 
  let rec make_expr () =
-   disj_list_expr [make_Const ; make_Variable; make_if; make_LambdaSimple; make_LambdaOpt;make_Applic; make_Or ]
+   disj_list_expr [make_Const ; make_Variable; make_if; make_LambdaSimple; make_LambdaOpt;make_Applic; make_Or; make_Define ; make_Set; make_Seq ]
    
   and make_Const = 
     fun  sexpr->
@@ -1007,10 +1007,41 @@ Reader.read_sexpr "(or 1 2)";;
     match sexpr with
     |Pair(Symbol("or"),list_sexpr) ->let list_sexpr_ = make_list_sexprs_for_app list_sexpr in 
                                 Or(list_sexpr_ )
-    |_->raise X_syntax_error;;
-      
+    |_->raise X_syntax_error
 
-    make_expr () (Reader.read_sexpr "(or 1 2)") ;;
+    and make_Define = 
+    fun sexpr->
+
+    match sexpr with
+    |Pair(Symbol("define"),Pair(var,Pair(sexp,Nil))) -> Def ((make_Variable var), make_expr () sexp)
+    |_->raise X_syntax_error
+    
+    and make_Set = 
+    fun sexpr->
+
+    match sexpr with
+    |Pair(Symbol("set!"),Pair(var,Pair(sexp,Nil))) -> Set ((make_Variable var), make_expr () sexp)
+    |_->raise X_syntax_error
+
+
+    and build_seq_list= 
+    fun sexpr ->
+    match sexpr with
+    |Pair(sexpr,Nil)->[make_expr () sexpr]
+    |Pair( a, b ) -> List.concat [[make_expr () a] ; build_seq_list b ] 
+    |_-> raise X_syntax_error
+
+
+    and make_Seq = 
+    fun sexpr->
+
+    match sexpr with
+    |Pair(Symbol("begin"),Nil)-> Const(Void)
+    |Pair(Symbol("begin"),Pair(sexpr,Nil))-> make_expr () sexpr
+    |Pair(Symbol("begin"),c) -> Seq(build_seq_list c)
+    |_->raise X_syntax_error;;
+
+    make_expr () (Reader.read_sexpr "(begin (+ 1 2) 2 (lambda () x) )") ;;
 
 
 module type TAG_PARSER = sig
