@@ -891,9 +891,7 @@ let reserved_word_list =
    "quasiquote"; "quote"; "set!"; "unquote";
    "unquote-splicing"];;  
 
-
-
-Reader.read_sexpr "(begin  3 1 #t)";;
+  
 
  let rec make_expr () =
    disj_list_expr [make_Const ; make_Variable; make_if; make_LambdaSimple; make_LambdaOpt;make_Applic; make_Or; make_Define ; make_Set; make_Seq ]
@@ -1043,6 +1041,42 @@ Reader.read_sexpr "(begin  3 1 #t)";;
 
     make_expr () (Reader.read_sexpr "(begin (+ 1 2) 2 (lambda () x) )") ;;
 
+    Reader.read_sexpr "(let ((value (h? x))
+    (f (lambda () (p q))))
+    (if value
+    ((f) value)))";;
+
+    let rec macro_Expender () = 
+      PC.disj_list [expand_Cond1;expand_Quasiquoted; ]
+  
+
+
+      and expand_Cond1 = 
+        fun sexpr->
+        match sexpr with 
+        | Pair (test,Pair (seq, Nil)) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),Pair(seq,Nil)),Nil)))
+        | _-> raise PC.X_no_match
+
+      and expand_Cond2 = 
+        fun sexpr->
+      match sexpr with
+      | Pair (test, Pair (Symbol "=>", Pair (sexprF, Nil)))->
+    
+      and expand_Quasiquoted = 
+        fun sexpr->
+        match sexpr with
+        | Pair (Symbol("unquote"),Pair(sexpr,Nil))-> sexpr
+        | Pair (Symbol("unquote-splicing"),Pair(sexpr,Nil))-> raise PC.X_no_match
+        | Nil-> Pair (Symbol("quote"),Pair(Nil,Nil))
+        | Symbol(c)->Pair (Symbol("quote"),Pair(Symbol(c),Nil))
+        | Vector(sexpr_list)-> Pair(Symbol("vector"),(List.fold_right (fun sexpr1 sexpr2-> Pair((expand_Quasiquoted sexpr1),sexpr2 )) sexpr_list Nil) )
+        | Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB)->  Pair(Pair(Symbol("append"),sexprA),expand_Quasiquoted sexprB)
+        | Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB)) -> Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),sexprB)
+        | Pair(sexprA,sexprB) ->  Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),expand_Quasiquoted sexprB)
+        |_-> raise PC.X_no_match;;
+    
+        macro_Expender () (Reader.read_sexpr "((zero? n) (g y))");;
+        Reader.read_sexpr "(if (zero? n) (begin (g y)))";;
 
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr

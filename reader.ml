@@ -755,28 +755,28 @@ let build_string e =
       and make_Quoted = 
       fun s -> 
       let nt_q1 = PC.word  "'" in
-      let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  in
+      let nt_Quoted = make_spaced((PC.caten nt_q1 (nt_sexpr 'w')))  in
       let (sym_sexp,rest ) = (nt_Quoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("quote"), Pair(sexpr, Nil)),rest) ;
       and make_QQuoted = 
       fun s -> 
       let nt_q2= PC.word "`" in
-      let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  in
+      let nt_QQuoted = make_spaced(PC.caten nt_q2 (nt_sexpr 'w'))  in
       let (sym_sexp,rest ) = (nt_QQuoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("quasiquote"), Pair(sexpr, Nil)),rest) ;
       and make_UnquotedSpliced = 
       fun s -> 
       let nt_q3= PC.word  ",@" in
-      let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w') in
+      let nt_UnquotedSpliced =make_spaced( PC.caten nt_q3 (nt_sexpr 'w')) in
       let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("unquote-splicing"), Pair(sexpr, Nil)),rest) ;
       and make_Unquoted = 
       fun s -> 
       let nt_q4= PC.word  "," in
-      let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) in
+      let nt_Unquoted = make_spaced( PC.caten nt_q4 (nt_sexpr 'w' )) in
       let (sym_sexp,rest ) = (nt_Unquoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("unquote"), Pair(sexpr, Nil)),rest);;
