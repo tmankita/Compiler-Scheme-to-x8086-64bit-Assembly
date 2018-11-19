@@ -1046,21 +1046,62 @@ let reserved_word_list =
     (if value
     ((f) value)))";;
 
-    let rec macro_Expender () = 
-      PC.disj_list [expand_Cond1;expand_Quasiquoted; ]
+    let car_cond = 
+      fun pair->
+      match pair with
+      |Pair(car,rest)-> car
+      |_->  raise PC.X_no_match;;
   
+      let cdr_cond = 
+        fun pair->
+        match pair with
+        |Pair(_,cdr)-> cdr
+        |_->raise PC.X_no_match;;
 
 
-      and expand_Cond1 = 
-        fun sexpr->
-        match sexpr with 
-        | Pair (test,Pair (seq, Nil)) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),Pair(seq,Nil)),Nil)))
-        | _-> raise PC.X_no_match
 
-      and expand_Cond2 = 
-        fun sexpr->
+        let rec expand_cond_disj () =
+            PC.disj_list [expand_Cond3; expand_Cond2; expand_Cond1]  
+          
+          
+          and expand_Cond1 = 
+          fun (car_sexpr, cdr_sexpr)->
+          match car_sexpr,cdr_sexpr with 
+          | Pair (_test, _seq), Nil -> Pair(Symbol("if"),Pair(_test,Pair(Pair(Symbol("begin"),_seq),Nil)))
+          | Pair (_test, _seq), rest -> Pair(Symbol("if"),Pair(_test,Pair(Pair(Symbol("begin"),_seq),   Pair((expand_cond_disj () ((car_cond rest), (cdr_cond rest)) ),Nil)      )))
+          | _,_->  raise PC.X_no_match
+  
+        and expand_Cond2 = 
+          fun (car_sexpr ,cdr_sexpr)->
+        match car_sexpr, cdr_sexpr with
+        | Pair (_test, Pair (Symbol "=>",Pair (_sexprf, Nil))), Nil ->Pair (Symbol "let", Pair (Pair (Pair (Symbol "value", Pair (_test, Nil)), Pair (Pair (Symbol "f", Pair (Pair (Symbol "lambda", Pair (Nil, Pair (_sexprf, Nil))), Nil)), Nil)), Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),Nil))), Nil)))
+        | Pair (_test, Pair (Symbol "=>",Pair (_sexprf, Nil))), rest-> Pair (Symbol "let", Pair (Pair (Pair (Symbol "value", Pair (_test, Nil)), Pair (Pair (Symbol "f", Pair (Pair (Symbol "lambda", Pair (Nil, Pair (_sexprf, Nil))), Nil)), Nil)), Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),   Pair((expand_cond_disj () ((car_cond rest), (cdr_cond rest))  ),Nil)    ))), Nil)))
+        | _,_-> raise PC.X_no_match
+
+        and expand_Cond3 = 
+        fun (car_sexpr, cdr) ->
+        match car_sexpr,cdr with
+        |Pair(Symbol "else", _seq),_-> Pair(Symbol("begin"),_seq)
+        |_,_->raise PC.X_no_match;;
+
+          
+
+        expand_cond_disj () ((car_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")), (cdr_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")));;
+      
+        Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )";;
+        car_cond((cdr_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")));; 
+
+
+
+    let rec macro_Expender () = 
+      PC.disj_list [expand_Cond ;expand_Quasiquoted ] 
+
+  
+      and expand_Cond = 
+      fun sexpr->
       match sexpr with
-      | Pair (test, Pair (Symbol "=>", Pair (sexprF, Nil)))->
+      |Pair (Symbol "cond", list_of_conds)->  (expand_cond_disj () ((car_cond list_of_conds), (cdr_cond list_of_conds)))
+      |_-> raise PC.X_no_match
     
       and expand_Quasiquoted = 
         fun sexpr->
@@ -1075,7 +1116,13 @@ let reserved_word_list =
         | Pair(sexprA,sexprB) ->  Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),expand_Quasiquoted sexprB)
         |_-> raise PC.X_no_match;;
     
-        macro_Expender () (Reader.read_sexpr "((zero? n) (g y))");;
+        macro_Expender () (Reader.read_sexpr "
+        (cond ((zero? n) (f x) (g y))
+        ((h? x) => (p q))
+        (else (h x y) (g x))
+        ((q? y) (p x) (q y)))");;
+
+
         Reader.read_sexpr "(if (zero? n) (begin (g y)))";;
 
 module type TAG_PARSER = sig
