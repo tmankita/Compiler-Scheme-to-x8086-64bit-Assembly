@@ -1084,25 +1084,101 @@ let reserved_word_list =
         |Pair(Symbol "else", _seq),_-> Pair(Symbol("begin"),_seq)
         |_,_->raise PC.X_no_match;;
 
-          
-
-        expand_cond_disj () ((car_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")), (cdr_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")));;
-      
-        Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )";;
-        car_cond((cdr_cond (Reader.read_sexpr "( ((h? x) => (p q)) (else (h x y) (g x)) )")));; 
-
-
+        
 
     let rec macro_Expender () = 
-      PC.disj_list [expand_Cond ;expand_Quasiquoted ] 
+      PC.disj_list [expand_mitDefine;expand_and ; make_let_rec ; expand_let_klini; expand_Cond ;expand_Let ;make_empty_case ] 
 
+      and make_empty_case=
+      fun sexpr->
+      sexpr
   
       and expand_Cond = 
       fun sexpr->
       match sexpr with
       |Pair (Symbol "cond", list_of_conds)->  (expand_cond_disj () ((car_cond list_of_conds), (cdr_cond list_of_conds)))
       |_-> raise PC.X_no_match
-    
+
+      and build_list_vars =
+      fun sexpr->
+      match sexpr with 
+      |Pair(Pair(Symbol(c),_ ) ,Nil) -> Pair(Symbol(c),Nil)
+      | Pair(Pair(Symbol(c),_ ) ,rest) -> Pair(Symbol(c),build_list_vars rest)
+      |_->raise PC.X_no_match
+
+      and build_list_values =
+      fun sexpr->
+      match sexpr with 
+      | Pair(Pair( _ ,Pair(v,Nil) ) ,Nil) ->  Pair(v,Nil)
+      | Pair(Pair(_,Pair(v,Nil) ) ,rest) -> Pair(v,build_list_values rest)
+      |_->raise PC.X_no_match
+ 
+      and expand_Let = 
+      fun sexpr->
+      match sexpr with
+      |Pair (Symbol "let", Pair (Nil,Pair(_body,Nil)))-> Pair (Pair(Symbol "lambda", Pair(Nil,Pair(_body,Nil))),Nil)
+      |Pair (Symbol "let", Pair (Pair (_arg, _args),Pair(_body,Nil))) -> let vars = build_list_vars (Pair(_arg,_args)) in
+                                                                let values= build_list_values (Pair(_arg,_args)) in
+                                                              Pair (Pair(Symbol "lambda", Pair(vars,Pair(_body,Nil))),values) 
+      |_-> raise PC.X_no_match
+
+      and make_let =
+       fun (args,body)->
+       match args with
+      | Nil -> body
+      | Pair(car,cdr) -> Pair (Symbol "let", Pair (Pair (car, Nil),Pair(make_let (cdr,body),Nil)))
+      | _ ->raise PC.X_no_match
+
+      and generate_whatever =
+      fun sexpr ->
+      match sexpr with 
+      |Pair(Symbol(c) ,Nil) -> Pair(Symbol(c),Pair( Pair (Symbol("quote"),Pair(Symbol("whatever"),Nil)),Nil )  )
+      | Pair(Symbol(c),rest) -> Pair(Pair(Symbol(c),Pair( Pair (Symbol("quote"),Pair(Symbol("whatever"),Nil)),Nil)),build_list_vars rest)
+      |_->raise PC.X_no_match
+
+      and generate_setBang=
+      fun (var,values) ->
+      match var, values with 
+      |Pair(Symbol(c),Nil), Pair(_sexpr,Nil) ->Pair (Symbol "set!", Pair (Symbol c, Pair (_sexpr, Nil)))
+      |Pair(Symbol(c),restVars), Pair(_sexpr,restValues) ->Pair(Pair (Symbol "set!", Pair (Symbol c, Pair (_sexpr, Nil))) , (generate_setBang(restVars,restValues)) )
+      |_->raise PC.X_no_match
+
+      and generate_Emptylet =
+      fun body->
+      Pair(Pair (Symbol "let", Pair (Nil, Pair (body, Nil))),Nil)
+
+      and make_let_rec= 
+      fun sexpr->
+      match sexpr with
+      | Pair (Symbol "letrec", Pair (Nil,Pair(_body,Nil)))-> Pair (Pair(Symbol "lambda", Pair(Nil,Pair(_body,Nil))),Nil)
+      | Pair (Symbol "letrec", Pair (Pair (_arg, _args),Pair(_body,Nil))) -> let vars = build_list_vars (Pair(_arg,_args)) in
+                                                                              let values= build_list_values (Pair(_arg,_args)) in
+                                                                                Pair(Symbol "let", Pair(Pair((generate_whatever vars),Nil),Pair((generate_setBang (vars, values)),(generate_Emptylet _body))))
+      |_-> raise PC.X_no_match
+      
+      and expand_let_klini = 
+      fun sexpr->
+      match sexpr with
+      |Pair (Symbol "let*", Pair (Pair (_arg, _args),Pair(_body,Nil))) ->  Pair (Symbol "let", Pair (Pair (_arg, Nil),Pair(make_let (_args,_body),Nil)))
+                                                              
+      |_-> raise PC.X_no_match
+
+
+      and expand_and=
+      fun sexpr->
+      match sexpr with
+      |Pair(Symbol "and",Nil)->Bool(true)
+      |Pair(Symbol "and",Pair(s1,Nil))->s1
+      |Pair (Symbol "and", Pair (_x1, _rest))->Pair (Symbol "if", Pair (_x1, Pair (expand_and (Pair(Symbol("and"),_rest)), Pair (Bool(false), Nil))))
+      |_-> raise PC.X_no_match
+
+      and expand_mitDefine= 
+      fun sexpr->
+      match sexpr with 
+      |Pair (Symbol "define", Pair (Pair (_var, _argList), Pair (_sexprPlus, Nil)))->Pair (Symbol "define", Pair (_var, Pair (Pair (Symbol "lambda", Pair (_argList, _sexprPlus)), Nil)))
+      |_->raise PC.X_no_match
+ 
+
       and expand_Quasiquoted = 
         fun sexpr->
         match sexpr with
@@ -1114,16 +1190,24 @@ let reserved_word_list =
         | Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB)->  Pair(Pair(Symbol("append"),sexprA),expand_Quasiquoted sexprB)
         | Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB)) -> Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),sexprB)
         | Pair(sexprA,sexprB) ->  Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),expand_Quasiquoted sexprB)
-        |_-> raise PC.X_no_match;;
+        |_-> raise PC.X_no_match   ;;
     
-        macro_Expender () (Reader.read_sexpr "
-        (cond ((zero? n) (f x) (g y))
-        ((h? x) => (p q))
-        (else (h x y) (g x))
-        ((q? y) (p x) (q y)))");;
 
 
-        Reader.read_sexpr "(if (zero? n) (begin (g y)))";;
+
+        
+        let rec nt_expand = 
+          fun sexpr->
+        match sexpr with
+        |Nil->Nil
+        |Pair(car,Nil)-> Pair((macro_Expender () (nt_expand car)),Nil)
+        |Pair(car,cdr)-> Pair( (macro_Expender () (nt_expand car)) , (macro_Expender () (nt_expand cdr)))
+        |c -> c;;
+        
+
+
+
+        macro_Expender () (Reader.read_sexpr "(define (square x) (* x x) )");;
 
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
