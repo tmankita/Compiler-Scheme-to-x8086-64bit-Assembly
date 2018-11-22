@@ -1087,11 +1087,25 @@ let reserved_word_list =
         
 
     let rec macro_Expender () = 
-      PC.disj_list [expand_mitDefine;expand_and ; make_let_rec ; expand_let_klini; expand_Cond ;expand_Let ;make_empty_case ] 
+      PC.disj_list [expand_mitDefine;expand_and ; make_let_rec ; expand_let_klini; expand_Cond ;expand_Let ;make_empty_case; expand_Quasiquoted ] 
 
       and make_empty_case=
       fun sexpr->
       sexpr
+
+      and expand_Quasiquoted = 
+      fun sexpr->
+      match sexpr with
+      | Pair(Symbol("quasiquote"),Pair (Symbol("unquote"),Pair(sexpr,Nil)))-> sexpr
+      | Pair(Symbol("quasiquote"), Pair (Symbol("unquote-splicing"),Pair(sexpr,Nil)))-> raise PC.X_no_match
+      | Pair(Symbol("quasiquote"),Nil)-> Pair (Symbol("quote"),Pair(Nil,Nil))
+      | Pair(Symbol("quasiquote"),Symbol(c))->Pair (Symbol("quote"),Pair(Symbol(c),Nil))
+      | Pair(Symbol("quasiquote"),Vector(sexpr_list))-> Pair(Symbol("vector"),(List.fold_right (fun sexpr1 sexpr2-> Pair((expand_Quasiquoted sexpr1),sexpr2 )) sexpr_list Nil) )
+      | Pair(Symbol("quasiquote"),Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB))->  Pair(Pair(Symbol("append"),sexprA),expand_Quasiquoted sexprB)
+      | Pair(Symbol("quasiquote"), Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB))) -> Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),sexprB)
+      | Pair(Symbol("quasiquote"),Pair(sexprA,sexprB)) ->  Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),expand_Quasiquoted sexprB)
+      | _-> raise PC.X_no_match  
+  
   
       and expand_Cond = 
       fun sexpr->
@@ -1176,24 +1190,8 @@ let reserved_word_list =
       fun sexpr->
       match sexpr with 
       |Pair (Symbol "define", Pair (Pair (_var, _argList), Pair (_sexprPlus, Nil)))->Pair (Symbol "define", Pair (_var, Pair (Pair (Symbol "lambda", Pair (_argList, _sexprPlus)), Nil)))
-      |_->raise PC.X_no_match
+      |_->raise PC.X_no_match;;
  
-
-      and expand_Quasiquoted = 
-        fun sexpr->
-        match sexpr with
-        | Pair (Symbol("unquote"),Pair(sexpr,Nil))-> sexpr
-        | Pair (Symbol("unquote-splicing"),Pair(sexpr,Nil))-> raise PC.X_no_match
-        | Nil-> Pair (Symbol("quote"),Pair(Nil,Nil))
-        | Symbol(c)->Pair (Symbol("quote"),Pair(Symbol(c),Nil))
-        | Vector(sexpr_list)-> Pair(Symbol("vector"),(List.fold_right (fun sexpr1 sexpr2-> Pair((expand_Quasiquoted sexpr1),sexpr2 )) sexpr_list Nil) )
-        | Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB)->  Pair(Pair(Symbol("append"),sexprA),expand_Quasiquoted sexprB)
-        | Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB)) -> Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),sexprB)
-        | Pair(sexprA,sexprB) ->  Pair(Pair(Symbol("cons"),expand_Quasiquoted sexprA),expand_Quasiquoted sexprB)
-        |_-> raise PC.X_no_match   ;;
-    
-
-
 
         
         let rec nt_expand = 
@@ -1204,10 +1202,12 @@ let reserved_word_list =
         |Pair(car,cdr)-> Pair( (macro_Expender () (nt_expand car)) , (macro_Expender () (nt_expand cdr)))
         |c -> c;;
         
+        let final_expander  =
+          fun sexpr->
+             (macro_Expender () (nt_expand sexpr));;
 
 
-
-        macro_Expender () (Reader.read_sexpr "(define (square x) (* x x) )");;
+       
 
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
@@ -1219,9 +1219,14 @@ module Tag_Parser : TAG_PARSER = struct
 
 (* work on the tag parser starts here *)
 
-let tag_parse_expression sexpr = raise X_not_yet_implemented;;
+let tag_parse_expression sexpr =
+  let expand_sexpr= (final_expander sexpr) in
+  make_expr () expand_sexpr;;
 
-let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
+
+let tag_parse_expressions sexpr = List.map (tag_parse_expression) sexpr;;
 
   
 end;; (* struct Tag_Parser *)
+
+Tag_Parser.tag_parse_expression (Reader.read_sexpr "(let ((a 8)) (+ a 2))");;
