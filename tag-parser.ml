@@ -1,4 +1,12 @@
+
+
+
+
+
+
+
 (*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~reader.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`*)
+
 
 
 (*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PC.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
@@ -911,7 +919,7 @@ let reserved_word_list =
    and make_Variable = 
     fun sexpr->
     match sexpr with
-    |Symbol(c)-> if (ormap (fun s-> (compare s c)= 0) reserved_word_list) = false then Var(c) 
+    |Symbol(c)->if (ormap (fun s-> (compare s c)= 0) reserved_word_list) = false then Var(c) 
                   else raise X_syntax_error
     |_-> raise X_syntax_error
   
@@ -933,7 +941,7 @@ let reserved_word_list =
     
     match sexpr with
     |Nil -> Const(Void),Nil
-    |Pair (else_,rest)-> (make_expr () else_),rest
+    |Pair (else_,Nil)-> (make_expr () else_),Nil
     |_-> raise X_syntax_error
      
   and  make_if =
@@ -985,7 +993,7 @@ let reserved_word_list =
     and make_LambdaSimple = 
     fun sexpr->
     match sexpr with 
-
+    | Pair(Symbol("lambda"),Pair(params,Nil))-> raise X_syntax_error
     | Pair(Symbol("lambda"),Pair(params,Pair(body,Nil)))->  buildLambdaSimple (make_params params, make_expr () body)                                                                                                    
     | Pair(Symbol("lambda"),Pair(params,body))->  buildLambdaSimple( (make_params params),make_Seq (Pair(Symbol("begin"),body)))                                 
     |_-> raise X_syntax_error
@@ -1001,37 +1009,35 @@ let reserved_word_list =
 
    and checkMixedParamsSyntax =
    fun (params, opt)->
-      let opt_to_list= (string_to_list opt) in
-      let optListTrimmed= (List.filter (fun a-> a!=' ') opt_to_list) in
-      let checkCorrect= (List.filter (fun a1-> (List.exists (fun a2->  String.equal (String.make 1 a1) a2  ) params )) optListTrimmed) in
-      if (List.length checkCorrect)=0 then true else false
+      
+     match params with
+     |[]->true
+     |_ -> let checkCorrect=  (andmap (fun s-> not((compare s opt)= 0)) params) in
+             if checkCorrect then true else false
+      
 
-  and checkOptSyntax =
-  fun opt->
-  let opt_to_list= (string_to_list opt) in
-  let optListTrimmed= (List.filter (fun a-> a!=' ') opt_to_list) in
-  let stringOptList= (List.map (fun c-> (String.make 1 c)) optListTrimmed) in
-    (checkParamsSyntaxSimple stringOptList)
+  
 
    and checkParamsSyntaxOpt=
    fun (params, opt)->
    let simple= (checkParamsSyntaxSimple params) in
    let mixed= (checkMixedParamsSyntax (params,opt)) in
-   let syntaxOpt= (checkOptSyntax opt) in
-   simple && mixed && syntaxOpt
+   simple && mixed 
 
    and buildLambdaOpt=
    fun (params,opt,body)->
      let syntax= (checkParamsSyntaxOpt (params,opt)) in
+     
     match syntax with
     |true-> LambdaOpt(params,opt,body)
-    |false-> raise X_syntax_error
+    |false->raise X_syntax_error
 
     and make_LambdaOpt = 
     fun sexpr ->
     match sexpr with 
+    | Pair(Symbol("lambda"),Pair(params,Nil))-> raise X_syntax_error
     | Pair(Symbol("lambda"),Pair (Symbol(param),Pair(Pair(body,Nil),Nil)))->  buildLambdaOpt ([],param,(make_expr () (Pair(body,Nil)))) 
-    | Pair(Symbol("lambda"),Pair (Symbol(param),Pair(body,Nil)))->  buildLambdaOpt ([],param,(make_expr () (body))) 
+    
     | Pair(Symbol("lambda"),Pair (Symbol(param),body))->  buildLambdaOpt ([],param,(make_Seq (Pair(Symbol("begin"),body)))) 
     | Pair(Symbol("lambda"),Pair (params,Pair(body,Nil)))-> let (params_,opt_params)= make_params_opt params in
                                                               buildLambdaOpt (params_,opt_params,(make_expr () body)) 
@@ -1039,6 +1045,9 @@ let reserved_word_list =
                                                     buildLambdaOpt(params_,opt_params, (make_Seq (Pair(Symbol("begin"),body))))
                                                       
     |_->raise X_syntax_error
+
+
+  
 
     and make_list_sexprs_for_app = 
     fun sexpr_list ->
@@ -1060,7 +1069,7 @@ let reserved_word_list =
     fun sexpr->
     match sexpr with
     |Pair(Symbol("or"),Nil) -> Const (Sexpr (Bool false))
-    |Pair(Symbol("or"),Pair(sexpr,Nil)) ->Or( [(make_expr () sexpr)] )
+    |Pair(Symbol("or"),Pair(sexpr,Nil)) ->(make_expr () sexpr)
     |Pair(Symbol("or"),list_sexpr) ->let list_sexpr_ = make_list_sexprs_for_app list_sexpr in 
                                 Or(list_sexpr_ )
     |_->raise X_syntax_error
@@ -1108,7 +1117,14 @@ let reserved_word_list =
           fun (car_sexpr ,cdr_sexpr)->
         match car_sexpr, cdr_sexpr with
         | Pair (_test, Pair (Symbol "=>",Pair (_sexprf, Nil))), Nil ->Pair (Symbol "let", Pair (Pair (Pair (Symbol "value", Pair (_test, Nil)), Pair (Pair (Symbol "f", Pair (Pair (Symbol "lambda", Pair (Nil, Pair (_sexprf, Nil))), Nil)), Nil)), Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),Nil))), Nil)))
-        | Pair (_test, Pair (Symbol "=>",Pair (_sexprf, Nil))), rest-> Pair (Symbol "let", Pair (Pair (Pair (Symbol "value", Pair (_test, Nil)), Pair (Pair (Symbol "f", Pair (Pair (Symbol "lambda", Pair (Nil, Pair (_sexprf, Nil))), Nil)), Nil)), Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),   Pair((expand_cond_disj () ((car_cond rest), (cdr_cond rest))  ),Nil)    ))), Nil)))
+        | Pair (_test, Pair (Symbol "=>",Pair (_sexprf, Nil))), rest->
+         Pair (Symbol "let", 
+         Pair 
+         (Pair  (Pair (Symbol "value", Pair (_test, Nil)),
+          Pair (Pair (Symbol "f", Pair (Pair (Symbol "lambda", Pair (Nil, Pair (_sexprf, Nil))), Nil)),  Pair (Pair (Symbol "rest", Pair (Pair (Symbol "lambda", Pair (Nil, Pair ((expand_cond_disj () ((car_cond rest), (cdr_cond rest))  ), Nil))), Nil)), Nil))
+          ),
+           Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)), 
+             Pair(Pair(Symbol "rest",Nil),Nil)    ))), Nil)))
         | _,_-> raise PC.X_no_match
 
         and expand_Cond3 = 
@@ -1132,23 +1148,17 @@ let reserved_word_list =
       and expand_Quasiquoted = 
       fun sexpr->
       match sexpr with
+      | (Pair(Symbol "quasiquote", Pair( Pair(Symbol "quote", Pair(sexpr, Nil)), Nil)))-> Pair(Symbol "quote",Pair(Pair(Symbol "quote", Pair(sexpr, Nil)),Nil))
       | Pair(Symbol("quasiquote"),Pair (Pair(Symbol("unquote"),Pair(sexpr,Nil)),Nil))-> sexpr
       | Pair(Symbol("quasiquote"), Pair (Pair (Symbol("unquote-splicing"),Pair(sexpr,Nil)),Nil))-> raise PC.X_no_match
       | Pair(Symbol("quasiquote"),Pair(Nil,Nil))-> Pair (Symbol("quote"),Pair(Nil,Nil))
-      | Pair(Symbol("quasiquote"),Pair(Symbol(c),Nil))->Pair (Symbol("quote"),Pair(Symbol(c),Nil))
       | Pair(Symbol("quasiquote"),Pair(Vector(sexpr_list),Nil))-> Pair(Symbol("vector"),(List.fold_right (fun sexpr1 sexpr2-> Pair(expand_Quasiquoted  (Pair(Symbol("quasiquote"),Pair(sexpr1,Nil))),sexpr2 )) sexpr_list Nil) )
       | Pair(Symbol("quasiquote"),Pair(Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB),Nil))->  Pair(Symbol("append"),Pair( expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair (Pair(Symbol("unquote"),sexprA),Nil))) , Pair (expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprB,Nil))),Nil) ))
       | Pair(Symbol("quasiquote"), Pair(Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB)),Nil)) -> Pair(Symbol("cons"),Pair (expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprA,Nil))),sexprB))
       | Pair(Symbol("quasiquote"),Pair(Pair(sexprA,sexprB),Nil)) ->Pair(Symbol "cons",Pair(expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprA,Nil))) ,  Pair(expand_Quasiquoted  (Pair(Symbol("quasiquote"),Pair(sexprB,Nil)))  ,Nil))) 
+      | Pair(Symbol("quasiquote"),Pair(sexpr,Nil))->Pair (Symbol("quote"),Pair(sexpr,Nil))
       | _-> raise PC.X_no_match  
   
-
-
-                                                                                                      (*Pair (Symbol "vector", Pair (Pair (Symbol "quote", Pair (Symbol "a", Nil)), 
-                                                                                                      Pair (Symbol "b", Pair (Pair (Symbol "quote", Pair (Symbol "c", Nil)), Pair (Symbol "d", Nil)))))
-*)
-                                                                                                
-
   
       and expand_Cond = 
       fun sexpr->
@@ -1180,9 +1190,7 @@ let reserved_word_list =
                                                               Pair (Pair(Symbol "lambda", Pair(vars,Pair(_body,Nil))),values) 
       |Pair (Symbol "let", Pair (Nil,_body))->Pair (Pair(Symbol "lambda", Pair(Nil,_body)),Nil)
       |Pair (Symbol "let", Pair (Pair (_arg, _args),_body))-> let vars = build_list_vars (Pair(_arg,_args)) in
-                                                              
                                                               let values= build_list_values (Pair(_arg,_args)) in
-                                                          
                                                                Pair (Pair(Symbol "lambda", Pair(vars,_body)),values)
       |_-> raise PC.X_no_match
 
@@ -1190,8 +1198,12 @@ let reserved_word_list =
        fun (args,body)->
        match args with
       | Nil -> body
-      | Pair(car,cdr) -> Pair (Symbol "let", Pair (Pair (car, Nil),Pair(make_let (cdr,body),Nil)))
+      | Pair(car,cdr) -> Pair(Pair (Symbol "let", Pair (Pair (car, Nil),make_let (cdr,body))),Nil)
       | _ ->raise PC.X_no_match
+
+
+
+
 
         and generate_Emptylet =
       fun body->
@@ -1207,7 +1219,7 @@ let reserved_word_list =
       and generate_setBang=
       fun (var,values,body) ->
       match var, values with 
-      |Pair(Symbol(c),Nil), Pair(_sexpr,Nil) -> Pair(Pair (Symbol "set!", Pair (Symbol c, Pair (_sexpr, Nil))),(generate_Emptylet body))
+      |Pair(Symbol(c),Nil), Pair(_sexpr,Nil) -> Pair(Pair (Symbol "set!", Pair (Symbol c, Pair (_sexpr, Nil))),(body))
       |Pair(Symbol(c),restVars), Pair(_sexpr,restValues) ->Pair(Pair (Symbol "set!", Pair (Symbol c, Pair (_sexpr, Nil))) , (generate_setBang(restVars,restValues,body)) )
       |_->raise PC.X_no_match
 
@@ -1233,8 +1245,8 @@ let reserved_word_list =
       and make_let_rec= 
       fun sexpr->
       match sexpr with
-      | Pair (Symbol "letrec", Pair (Nil,Pair(_body,Nil)))-> Pair (Pair(Symbol "lambda", Pair(Nil,Pair(_body,Nil))),Nil)
-      | Pair (Symbol "letrec", Pair (Pair (_arg, _args),Pair(_body,Nil))) ->let vars = build_list_vars (Pair(_arg,_args)) in
+      | Pair (Symbol "letrec", Pair (Nil,_body))-> Pair (Pair(Symbol "lambda", Pair(Nil,_body)),Nil)
+      | Pair (Symbol "letrec", Pair (Pair (_arg, _args),_body)) ->let vars = build_list_vars (Pair(_arg,_args)) in
                                                                                 let values= build_list_values (Pair(_arg,_args)) in
                                                                                 Pair(Symbol "let", Pair((generate_whatever vars),(generate_setBang (vars, values,_body))))
       |_-> raise PC.X_no_match
@@ -1242,10 +1254,15 @@ let reserved_word_list =
       and expand_let_klini = 
       fun sexpr->
       match sexpr with
-      |Pair (Symbol "let*", Pair (Pair (_arg, _args),Pair(_body,Nil))) ->  Pair (Symbol "let", Pair (Pair (_arg, Nil),Pair(make_let (_args,_body),Nil)))
-      |Pair (Symbol "let*", Pair (Nil,Pair(_body,Nil))) -> Pair (Symbol "let", Pair (Nil,Pair(_body,Nil)))
+      |Pair (Symbol "let*", Pair (Pair (_arg, Nil),_body)) -> Pair (Symbol "let", Pair (Pair (_arg, Nil),make_let (Nil,_body)))
+      |Pair (Symbol "let*", Pair (Pair (_arg, _args),_body)) -> Pair (Symbol "let", Pair (Pair (_arg, Nil),make_let (_args,_body)))
+      
+      |Pair (Symbol "let*", Pair (Nil,Nil)) -> raise PC.X_no_match
+      |Pair (Symbol "let*", Pair (Nil,_body)) -> Pair (Symbol "let", Pair (Nil,_body))
+     
                                         
       |_-> raise PC.X_no_match
+
 
 
       and expand_and=
@@ -1276,8 +1293,7 @@ let reserved_word_list =
           fun sexpr->
           (nt_expand (macro_Expender () sexpr));;
 
-          (Reader.read_sexpr"`(,@a ,@b)");;
-          (final_expander (Reader.read_sexpr"`#(a ,b c ,d)"));;
+    
   
 
 module type TAG_PARSER = sig
@@ -1303,15 +1319,6 @@ end;; (* struct Tag_Parser *)
 
 
 
-Tag_Parser.tag_parse_expression(Reader.read_sexpr "(let
-((value e1)
-(f (lambda () f1))
-(rest (lambda ()
-(let ((value e2)(f (lambda () f2))) (if value ((f) value)))
-)))
-(if value ((f) value) (rest)))");;
-
-Tag_Parser.tag_parse_expression(Reader.read_sexpr"(cond (e1 => f1) (e2 => f2))");;
 
 
     (**********TESTING**********)
@@ -1439,7 +1446,7 @@ _assert 12.0 "(or #t #f #\\a)"
      [Const (Sexpr (Bool true)); Const (Sexpr (Bool false));
       Const (Sexpr (Char 'a'))]);;
 
-_assert 12.1 "(or 'a)"  (Or [Const (Sexpr (Symbol "a"))]);;
+(*_assert 12.1 "(or 'a)"  (Or [Const (Sexpr (Symbol "a"))]);;*)
   
 (* based on forum answers, the case with one expression is only *evaluated* to that expression,
 but its still parsed as an Or expression at this point
@@ -1576,3 +1583,153 @@ _assert 21.2 "(cond (p1 e1 e2) (p2 e3 e4) (else e5 e6) (BAD BAD BAD))"
         (if p2
           (begin e3 e4)
           (begin e5 e6)))");;
+
+
+
+
+
+          (*~~~~~~~~~~~~~~~~~~~~~~~~~~~to scheme to delete!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+          
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+Printf.printf "!!!!! %s !!!!!!" "PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECS";;
+
+
+let car s =
+  match s with
+  |Pair(a, b) -> a
+  |_ -> raise X_syntax_error;;
+
+  (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+  
+let cdr s =
+  match s with
+  |Pair(a, b) -> b
+  |_ -> raise X_syntax_error;;
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let is_pair s =
+  match s with
+   |Pair(a, b) -> true
+   |_-> false;;
+
+   (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let rec is_proper_list s =
+   match s with
+   |Pair(a, b) -> if b = Nil then true else (is_proper_list b)
+   |Nil -> true
+   |_-> false;;
+ 
+ (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+ exception Incorrect_arg_error;;
+let all_list_length s =
+
+  let rec loop lst len =
+    match lst with
+    |Pair(a, b) -> (loop (cdr lst) (len + 1))
+    |Nil -> len            
+    |_-> len + 1 in
+  let initial_loop lst =
+    match lst with
+    |Pair(a, b)-> (loop lst 0)
+    |Nil -> 0
+    |_-> raise Incorrect_arg_error in
+  initial_loop s ;;
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let list_scheme_to_list s =
+  let rec loop lst = if all_list_length lst = 0
+                     then []
+                     else (car lst)::(loop (cdr lst)) in
+
+  loop s;;
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let list_scheme_to_list_im s =
+  let rec loop lst = if all_list_length lst = 2
+                     then [car lst; Symbol "." ; cdr lst]
+                     else (car lst)::(loop (cdr lst)) in
+  loop s;;
+
+  (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+  
+let rec to_scheme sexp =
+  match sexp with
+  |Number( Int (a)) -> string_of_int a
+  |Number(Float(a)) -> string_of_float a
+  |Char(a) -> list_to_string [a]
+  |Symbol(a) ->  a
+               
+  |String(a) -> a
+  |Bool(a) when a -> "true"
+  |Bool(a) -> "false"
+  |Nil -> "()"
+  |Pair(a,b) when a = Symbol("quoted") && (is_proper_list b) ->  String.concat "" ["'";to_scheme (car b)]
+  |Pair(a,b) when a = Symbol("quoted") &&  (not (is_proper_list b)) ->  String.concat "" ["'";to_scheme  b]
+  |Pair(a,b) ->  let head = [to_scheme a] in
+                 
+                 let tail = match b with
+                   |Nil -> []
+                   |_ when is_proper_list b -> List.map to_scheme (list_scheme_to_list b)
+                   |_ when not (is_pair b) -> ["." ;to_scheme b]
+                   |_ ->  List.map to_scheme  (list_scheme_to_list_im b) in
+                 String.concat " " (List.concat [["("];head;tail;[")"]])
+                 
+  |Vector (a) -> let lst =  List.map to_scheme a in
+                 String.concat " " (List.concat [["#("];lst;[")"]]);;
+
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let to_scheme_wrapper sexp= match sexp with
+  |Pair(a,b)  -> String.concat "" ["'";to_scheme sexp] 
+  |_ -> to_scheme sexp;;
+
+(* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+
+let to_list_scheme str =
+  String.concat " " (List.concat [["("];str;[")"]]);;
+
+  
+  (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
+  
+let rec to_scheme2 expr =
+  match expr with
+  |Const (a) when a = Void -> "Void"
+  |Const (Sexpr(a)) -> to_scheme_wrapper a
+  |Var(a) -> a
+  |If(a,b,c) -> to_list_scheme ["if";to_scheme2 a;to_scheme2 b;to_scheme2 c]
+  |Seq (lst) -> to_list_scheme (List.concat [["begin"];List.map to_scheme2 lst])
+  |Set(a,b) ->  to_list_scheme (List.concat [["set!"];[to_scheme2 a];[to_scheme2 b]])
+  |Def(a,b) ->  to_list_scheme (List.concat [["define"];[to_scheme2 a];[to_scheme2 b]])
+  |Or(lst) -> to_list_scheme (List.concat [["or"];List.map to_scheme2 lst])
+  |LambdaSimple(args , body) -> to_list_scheme (List.concat [["lambda"];[(to_list_scheme args)];(match body with
+                                                                                                 |Seq(lst) -> List.map to_scheme2 lst
+                                                                                                 |_ ->  [to_scheme2 body])])
+                              
+  |LambdaOpt(arg1,arg2,body) when List.length arg1 = 0 -> to_list_scheme (List.concat [["lambda"];[arg2];(match body with
+                                                                                                                        |Seq(lst) -> List.map to_scheme2 lst
+                                                                                                                        |_ ->  [to_scheme2 body])])
+                                                                                                                      
+  |LambdaOpt(arg1,arg2,body) -> to_list_scheme (List.concat [["lambda"];[(to_list_scheme (List.concat [arg1;["."];[arg2]] ))];(match body with
+                                                                                                                        |Seq(lst) -> List.map to_scheme2 lst
+                                                                                                                        |_ ->  [to_scheme2 body])])
+  |Applic(op,lst) ->  to_list_scheme (List.concat [[to_scheme2 op];List.map to_scheme2 lst])
+  |_ -> "";;
+  
+
+   (* AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA   *)                              
+                                                       
+    
+         to_scheme   ((Pair(Symbol "letrec", Pair(Nil, Pair(Symbol "g", Pair(Symbol "f", Nil)))))) ;;      
+         
+         
+         to_scheme ((Pair(Symbol "let*", Pair(Pair(Pair(Symbol "s", Pair(Number (Int 4), Nil)), Pair(Pair(Symbol "y", Pair(String "s", Nil)), Pair(Pair(Symbol "r", Pair(Char 'g', Nil)), Nil))), Pair(Symbol "g", Pair(Symbol "f", Pair(Number (Int 3), Nil)))))));;
+         
+         to_scheme2      (   Applic(LambdaSimple([ "s" ],Applic(LambdaSimple([ "y" ],Seq([ LambdaSimple([ "r" ],Seq([ Var("g"); Var("f"); Const(Sexpr(Number(Int(3)))) ])); Const(Sexpr(Char('g'))) ])),[ Const(Sexpr(String("s"))) ])),[ Const(Sexpr(Number(Int(4)))) ])  )   ;;
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~ end to scheme to delete!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
