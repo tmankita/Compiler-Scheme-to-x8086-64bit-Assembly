@@ -1,15 +1,5 @@
 
-
-
-
-
-
-
-(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~reader.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`*)
-
-
-
-(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PC.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Pc.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~``*)
 (* pc.ml
  * A parsing-combinators package for ocaml
  *
@@ -200,7 +190,7 @@ end;; (* end of struct PC *)
 
 (* end-of-input *)
 
-(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END PC.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~reader~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
 
 (* reader.ml
  * A compiler from Scheme to x86/64
@@ -242,7 +232,10 @@ end;; (* end of struct PC *)
    | Vector(l1), Vector(l2) -> List.for_all2 sexpr_eq l1 l2
    | _ -> false;;
 
-  
+      
+
+
+ 
 
 module Reader: sig
   val read_sexpr : string -> sexpr
@@ -258,8 +251,6 @@ end
 	s) then str
   else Printf.sprintf "|%s|" str;;
   
-
-     
   let lowercase_ascii_help  =
     let delta = int_of_char 'A' - int_of_char 'a' in
     fun ch ->
@@ -291,6 +282,9 @@ end
 
   let _boolean_ = make_spaced (PC.caten _hashSymbol_ (PC.one_of_ci "tf"));;
 
+
+  let nt_symbol =  make_spaced ((PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:")) );;
+
   let correct_boolean e = 
     let ( symbol , be) = e in         
     if (be = 't' || be ='T') then Bool(true)
@@ -310,7 +304,7 @@ end
     
       let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
     
-      let nt_integer= make_spaced (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e));;
+      let nt_integer= PC.not_followed_by (make_spaced (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e))) (nt_symbol);;
     
     let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
     
@@ -405,7 +399,7 @@ let make_floating_point =
 
  let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
 
- let nt_HexFloat= make_spaced (PC.caten nt_HexInteger nt_right_side_hex_floating_point);;
+ let nt_HexFloat= PC.not_followed_by (make_spaced (PC.caten nt_HexInteger nt_right_side_hex_floating_point)) (nt_symbol);;
 
  
  let concat_hex left right= String.concat "" ["0x" ; (list_to_string left) ; "." ; (list_to_string right)];; 
@@ -426,9 +420,6 @@ let make_floating_point =
 
 
 
-
-let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:"));;
-
  let correct_symbol symbol s = 
   (Symbol(list_to_string (List.map lowercase_ascii symbol )),s);;
 
@@ -440,7 +431,7 @@ let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0
 
   let nt_CharPrefix = PC.caten _hashSymbol_ nt_slash;;
   let nt_VisibleSimpleChar =make_spaced (PC.caten nt_CharPrefix (PC.diff PC.nt_any PC.nt_whitespace));;
-  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word_ci "newline"); (PC.word_ci "nul"); (PC.word_ci "page"); (PC.word "return"); (PC.word_ci "space"); (PC.word "tab");(PC.word "double quote");(PC.word_ci "\\\\");(PC.word "\"");(PC.word_ci "f"); (PC.word "t"); (PC.word_ci "r"); (PC.word_ci "n")] ));;
+  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word_ci "newline"); (PC.word_ci "nul"); (PC.word_ci "page"); (PC.word_ci "return"); (PC.word_ci "space"); (PC.word_ci "tab");(PC.word_ci "double quote")] ));;
   let nt_HexChar= make_spaced (PC.caten nt_CharPrefix (PC.caten nt_x (PC.plus (PC.one_of_ci "0123456789abcdef")))) ;;
   
 
@@ -544,6 +535,7 @@ let build_string e =
   let (q_1, (sen, q_2)) = e in
   String (String.concat "" [list_to_string (List.map (fun l -> (List.nth l 0)) sen)]);;
 
+  let make_Number= make_spaced( (PC.disj_list [make_floating_point; make_HexFloat;make_integer]) ) ;;
 
 
 
@@ -560,9 +552,12 @@ let build_string e =
 
   let rec nt_sexpr_three_dotted = 
     function 
-     |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD; make_NumberD; make_StringD ; make_symbolD;  make_DottedlistD;make_listD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
+     |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD;  make_Number;  make_symbolD;  make_StringD ;   make_DottedlistD;make_listD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
      (fun (nil1,(sexpr,nil2)) -> sexpr)
- 
+    
+
+
+
      and make_NilD = 
        fun s->
        let (e,s) = (nt_Nil s) in
@@ -581,7 +576,7 @@ let build_string e =
        let (e,s)=  (nt_String s) in
         ((build_string e),s)
 
-   and make_CharD = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ]
+   and make_CharD = PC.disj_list [make_NamedChar;  make_HexChar ; make_VisibleSimpleChar ]
 
    and make_symbolD = 
        fun s->
@@ -589,7 +584,7 @@ let build_string e =
 
         correct_symbol e rest
 
-   and make_NumberD= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
+
 
    and make_booleanD = 
        fun s->
@@ -675,12 +670,15 @@ let build_string e =
 
 
          let three_dots= make_spaced (PC.word "...");;
+
      
      let rec nt_sexpr = 
      function
-      |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol;  make_list; make_Dottedlist; make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) 
-                        (fun (  (nil1 , ( sexpr , nil2 ) )) ->  sexpr)
+      |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;   make_list; make_Dottedlist; make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
+                        (fun (  (nil1 , ( sexpr , nil2 ) ), opt ) ->  sexpr)
   
+
+
       and make_Nil = 
         fun s->
         let (e,s) = (nt_Nil s) in
@@ -707,7 +705,6 @@ let build_string e =
 
          correct_symbol e rest
 
-    and make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
 
     and make_boolean = 
         fun s->
@@ -764,28 +761,28 @@ let build_string e =
       and make_Quoted = 
       fun s -> 
       let nt_q1 = PC.word  "'" in
-      let nt_Quoted = PC.caten nt_q1 (nt_sexpr 'w')  in
+      let nt_Quoted = make_spaced((PC.caten nt_q1 (nt_sexpr 'w')))  in
       let (sym_sexp,rest ) = (nt_Quoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("quote"), Pair(sexpr, Nil)),rest) ;
       and make_QQuoted = 
       fun s -> 
       let nt_q2= PC.word "`" in
-      let nt_QQuoted = PC.caten nt_q2 (nt_sexpr 'w')  in
+      let nt_QQuoted = make_spaced(PC.caten nt_q2 (nt_sexpr 'w'))  in
       let (sym_sexp,rest ) = (nt_QQuoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("quasiquote"), Pair(sexpr, Nil)),rest) ;
       and make_UnquotedSpliced = 
       fun s -> 
       let nt_q3= PC.word  ",@" in
-      let nt_UnquotedSpliced = PC.caten nt_q3 (nt_sexpr 'w') in
+      let nt_UnquotedSpliced =make_spaced( PC.caten nt_q3 (nt_sexpr 'w')) in
       let (sym_sexp,rest ) = (nt_UnquotedSpliced s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("unquote-splicing"), Pair(sexpr, Nil)),rest) ;
       and make_Unquoted = 
       fun s -> 
       let nt_q4= PC.word  "," in
-      let nt_Unquoted = PC.caten nt_q4 (nt_sexpr 'w' ) in
+      let nt_Unquoted = make_spaced( PC.caten nt_q4 (nt_sexpr 'w' )) in
       let (sym_sexp,rest ) = (nt_Unquoted s) in
         let (name,sexpr)= sym_sexp in
           (Pair(Symbol("unquote"), Pair(sexpr, Nil)),rest);;
@@ -794,8 +791,7 @@ let build_string e =
 let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
 
 
-  
- 
+
 let read_sexprs string = 
   let charList = (string_to_list string) in
 
@@ -821,10 +817,9 @@ let read_sexpr string =
   else raise X_this_should_not_happen  
   with PC.X_no_match -> raise PC.X_no_match ;;
 
-
-
  
 end;; (* struct Reader *)
+
 
 (*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END reader.ml~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 
@@ -835,6 +830,7 @@ end;; (* struct Reader *)
  *)
 
 #use "reader.ml";;
+
 
 type constant =
   | Sexpr of sexpr
@@ -879,7 +875,6 @@ let rec expr_eq e1 e2 =
 	
                        
 exception X_syntax_error;;
-
 
 
 let disj_expr nt1 nt2 =
@@ -1103,7 +1098,7 @@ let reserved_word_list =
 
 
         let rec expand_cond_disj () =
-            PC.disj_list [expand_Cond3; expand_Cond2; expand_Cond1]  
+            PC.disj_list [expand_Cond3 ;expand_Cond2; expand_Cond1]  
           
           
           and expand_Cond1 = 
@@ -1130,7 +1125,7 @@ let reserved_word_list =
         and expand_Cond3 = 
         fun (car_sexpr, cdr) ->
         match car_sexpr,cdr with
-        |Pair(Symbol "else", _seq),_-> Pair(Symbol("begin"),_seq)
+        |Pair(Symbol "else", _seq),Nil-> Pair(Symbol("begin"),_seq)
         |_,_->raise PC.X_no_match;;
 
    
@@ -1148,22 +1143,23 @@ let reserved_word_list =
       and expand_Quasiquoted = 
       fun sexpr->
       match sexpr with
-      | (Pair(Symbol "quasiquote", Pair( Pair(Symbol "quote", Pair(sexpr, Nil)), Nil)))-> Pair(Symbol "quote",Pair(Pair(Symbol "quote", Pair(sexpr, Nil)),Nil))
       | Pair(Symbol("quasiquote"),Pair (Pair(Symbol("unquote"),Pair(sexpr,Nil)),Nil))-> sexpr
       | Pair(Symbol("quasiquote"), Pair (Pair (Symbol("unquote-splicing"),Pair(sexpr,Nil)),Nil))-> raise PC.X_no_match
       | Pair(Symbol("quasiquote"),Pair(Nil,Nil))-> Pair (Symbol("quote"),Pair(Nil,Nil))
       | Pair(Symbol("quasiquote"),Pair(Vector(sexpr_list),Nil))-> Pair(Symbol("vector"),(List.fold_right (fun sexpr1 sexpr2-> Pair(expand_Quasiquoted  (Pair(Symbol("quasiquote"),Pair(sexpr1,Nil))),sexpr2 )) sexpr_list Nil) )
       | Pair(Symbol("quasiquote"),Pair(Pair(Pair(Symbol("unquote-splicing"),sexprA),sexprB),Nil))->  Pair(Symbol("append"),Pair( expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair (Pair(Symbol("unquote"),sexprA),Nil))) , Pair (expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprB,Nil))),Nil) ))
       | Pair(Symbol("quasiquote"), Pair(Pair(sexprA,Pair(Symbol("unquote-splicing"),sexprB)),Nil)) -> Pair(Symbol("cons"),Pair (expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprA,Nil))),sexprB))
-      | Pair(Symbol("quasiquote"),Pair(Pair(sexprA,sexprB),Nil)) ->Pair(Symbol "cons",Pair(expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprA,Nil))) ,  Pair(expand_Quasiquoted  (Pair(Symbol("quasiquote"),Pair(sexprB,Nil)))  ,Nil))) 
+      | Pair(Symbol("quasiquote"),Pair(Pair(sexprA,sexprB),Nil)) ->Pair(Symbol "cons",Pair(expand_Quasiquoted (Pair(Symbol("quasiquote"),Pair(sexprA,Nil))) ,  Pair(expand_Quasiquoted  (Pair(Symbol("quasiquote"),Pair(sexprB,Nil)))  ,Nil)))
       | Pair(Symbol("quasiquote"),Pair(sexpr,Nil))->Pair (Symbol("quote"),Pair(sexpr,Nil))
       | _-> raise PC.X_no_match  
-  
   
       and expand_Cond = 
       fun sexpr->
       match sexpr with
-      |Pair (Symbol "cond", list_of_conds)->  (expand_cond_disj () ((car_cond list_of_conds), (cdr_cond list_of_conds)))
+      |Pair (Symbol "cond", Pair(Pair(Symbol "else",list_of_conds),Nil))-> (expand_cond_disj () ((car_cond (Pair(Pair(Symbol "else",list_of_conds),Nil))), (cdr_cond (Pair(Pair(Symbol "else",list_of_conds),Nil)))))
+      |Pair (Symbol "cond", Pair(Pair(Symbol "else",list_of_conds),_))-> raise PC.X_no_match
+
+      |Pair (Symbol "cond", list_of_conds)-> (expand_cond_disj () ((car_cond list_of_conds), (cdr_cond list_of_conds)))
       |_-> raise PC.X_no_match
 
       and build_list_vars =
@@ -1293,8 +1289,7 @@ let reserved_word_list =
           fun sexpr->
           (nt_expand (macro_Expender () sexpr));;
 
-    
-  
+  final_expander (Reader.read_sexpr "`('a)");;
 
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
@@ -1306,6 +1301,10 @@ module Tag_Parser : TAG_PARSER = struct
 
 (* work on the tag parser starts here *)
 
+
+
+    
+
 let tag_parse_expression sexpr =
   let expand_sexpr= (final_expander sexpr) in
   make_expr () expand_sexpr;;
@@ -1316,281 +1315,9 @@ let tag_parse_expressions sexpr = List.map (tag_parse_expression) sexpr;;
 
   
 end;; (* struct Tag_Parser *)
+Tag_Parser.tag_parse_expression ((Pair(Symbol "cond", Pair(Pair(Symbol "else", Pair(Symbol "g", Nil)), Nil))));;
 
-
-
-
-
-    (**********TESTING**********)
-
-  (**********TESTING**********)
-
-let _tag_string str =
-  let sexp = (Reader.read_sexpr str) in
-  Tag_Parser.tag_parse_expression sexp;;
-
-exception X_test_mismatch;;
-
-(*Test will fail if no X_syntax_error is raised with input str*)
-let _assertX num str =
-  try let sexpr = (Tag_Parser.tag_parse_expression (Reader.read_sexpr str)) in
-      match sexpr with
-      |_ ->
-        (failwith
-	(Printf.sprintf
-	   "Failed %.1f: Expected syntax error with string '%s'"num str))
-   with
-  |PC.X_no_match ->
-     (failwith
-	(Printf.sprintf
-	   "Failed %.1f with X_no_match: Reader couldn't parse the string '%s'"num str))
-  |X_syntax_error -> num
-     
-(*Test will fail if an exception is raised,
-or the output of parsing str is different than the expression out*)
-let _assert num str out =
-  try let sexpr = (Reader.read_sexpr str) in
-      (if not (expr_eq (Tag_Parser.tag_parse_expression sexpr) out)
-       then raise X_test_mismatch
-       else num)
-  with
-  |PC.X_no_match ->
-     (failwith
-	(Printf.sprintf
-	   "Failed %.2f with X_no_match: Reader couldn't parse the string '%s'"num str))
-  |X_test_mismatch ->
-    (failwith
-       (Printf.sprintf
-	  "Failed %.2f with mismatch: The input -- %s -- produced unexpected expression"num str))
-  |X_syntax_error ->
-     (failwith
-	(Printf.sprintf
-	   "Failed %.2f with X_syntax_error: Tag parser failed to resolve expression '%s'"num str));;
-
-(*Boolean*)
-_assert 1.0 "#t" ( Const (Sexpr (Bool true)));;
-_assert 1.1 "#f" ( Const (Sexpr (Bool false)));;
-
-(*Number*)
-_assert 2.0 "123" ( Const (Sexpr (Number (Int 123))));;
-_assert 2.1 "-123" ( Const (Sexpr (Number (Int (-123)))));;
-_assert 2.2 "12.3" ( Const (Sexpr (Number (Float (12.3)))));;
-_assert 2.3 "-12.3" ( Const (Sexpr (Number (Float (-12.3)))));;
-
-
-(*Char*)
-_assert 3.0 "#\\A" ( Const (Sexpr (Char 'A')));;
-_assert 3.1 "#\\nul" ( Const (Sexpr (Char '\000')));;
-
-
-(*String*)
-_assert 4.0 "\"String\"" (Const (Sexpr (String "String")));;
-
-
-(*Quote*)
-_assert 5.0 "'quoting" (Const (Sexpr (Symbol "quoting")));;
-(*_assert 5.1 ",unquoting" (Const (Sexpr (Symbol "unquoting")));; removed - invalid syntax*)
-
-(*Symbol*)
-_assert 6.0 "symbol" (Var "symbol");;
-
-(*If*)
-_assert 7.0 "(if #t 2 \"abc\")"
-  (If (Const (Sexpr (Bool true)), Const (Sexpr (Number (Int 2))),
-       Const (Sexpr (String "abc"))));;
-  
-_assert 7.1 "(if #t 2)"
-  (If (Const (Sexpr (Bool true)), Const (Sexpr (Number (Int 2))),
-       (Const Void)));;
-  
-(*SimpleLambda*)
-_assert 8.0 "(lambda (a b c) d)" (LambdaSimple (["a"; "b"; "c"], Var "d"));;
-_assert 8.1 "(lambda (a b c) (begin d))" (LambdaSimple (["a"; "b"; "c"], Var "d"));;
-_assert 8.2 "(lambda (a b c) a b)" (LambdaSimple (["a"; "b"; "c"], Seq [Var "a"; Var "b"]));;
-_assert 8.3 "(lambda (a b c) (begin a b))" (LambdaSimple (["a"; "b"; "c"], Seq [Var "a"; Var "b"]));;
-_assert 8.4 "(lambda (a b c) (begin))" (LambdaSimple (["a"; "b"; "c"], Const Void));;
-_assertX 8.5 "(lambda (a b c d d) e f)";;
-_assert 8.6 "(lambda () e f)" (LambdaSimple( [], Seq [Var "e"; Var "f"])) ;;
-
-(*LambdaOpt*)
-_assert 9.0 "(lambda (a b . c) d)" ( LambdaOpt (["a"; "b"], "c", Var "d"));;
-_assert 9.1 "(lambda (a b . c) (begin d))" ( LambdaOpt (["a"; "b"], "c", Var "d"));;
-_assert 9.2 "(lambda (a b . c) d e)" ( LambdaOpt (["a"; "b"], "c",  Seq [Var "d"; Var "e"]));;
-_assert 9.3 "(lambda (a b . c) (begin d e))" ( LambdaOpt (["a"; "b"], "c",  Seq [Var "d"; Var "e"]));;
-_assert 9.4 "(lambda (a b . c) (begin) )" ( LambdaOpt (["a"; "b"], "c",  Const Void));;
-_assertX 9.5 "(lambda (a b c d .a) e f)";;
-
-
-
-(*Lambda Variadic*)
-_assert 10.0 "(lambda a d)" ( LambdaOpt ([], "a", Var "d"));;
-_assert 10.1 "(lambda a (begin d))" ( LambdaOpt ([], "a", Var "d"));;
-_assert 10.2 "(lambda a d e)" ( LambdaOpt ([], "a", Seq [Var "d"; Var "e"] ));;
-_assert 10.3 "(lambda a (begin d e))" ( LambdaOpt ([], "a",  Seq [Var "d"; Var "e"]));;
-_assert 10.4 "(lambda a (begin) )" ( LambdaOpt ([], "a",  Const Void));;
-
-(*Application*)
-_assert 11.0 "(+ 1 2 3)"
-  (Applic (Var "+", [Const (Sexpr (Number (Int 1)));
-		     Const (Sexpr (Number (Int 2)));
-		     Const (Sexpr (Number (Int 3)))]));;
-_assert 11.1 "((lambda (v1 v2) c1 c2 c3) b1 b2)"
-  (Applic
-     (LambdaSimple (["v1"; "v2"],
-		    Seq [Var "c1"; Var "c2"; Var "c3"]),
-      [Var "b1"; Var "b2"]));;
-
-(*Or*)
-_assert 12.0 "(or #t #f #\\a)"
-  (Or
-     [Const (Sexpr (Bool true)); Const (Sexpr (Bool false));
-      Const (Sexpr (Char 'a'))]);;
-
-(*_assert 12.1 "(or 'a)"  (Or [Const (Sexpr (Symbol "a"))]);;*)
-  
-(* based on forum answers, the case with one expression is only *evaluated* to that expression,
-but its still parsed as an Or expression at this point
-(Const (Sexpr (Symbol "a")));;*)
-
-_assert 12.2 "(or)"
-  (Const (Sexpr (Bool false)));;
-
-(*Define*)
-_assert 13.0 "(define a b)" (Def (Var "a", Var "b"));;
-_assertX 13.1 "(define 5 b)";;
-_assertX 13.2 "(define if b)";;
-
-(*Set*)
-_assert 14.0 "(set! a 5)" (Set (Var "a", Const (Sexpr (Number (Int 5)))));;
-_assertX 14.1 "(set! define 5)";;
-_assertX 14.2 "(set! \"string\" 5)";;
-
-
-(*Let*)
-_assert 15.0 "(let ((v1 b1)(v2 b2)) c1 c2 c3)"
-  (Applic (LambdaSimple (["v1"; "v2"], Seq [Var "c1"; Var "c2"; Var "c3"]), [Var "b1"; Var "b2"]));;
-_assert 15.1 "(let () c1 c2)" (Applic (LambdaSimple ([], Seq [Var "c1"; Var "c2"]), []));;
-
-(*And*)
-_assert 16.0 "(and)" (Const (Sexpr (Bool true)));;
-_assert 16.1 "(and e1)" (Var "e1");;
-_assert 16.2 "(and e1 e2 e3 e4)"
-  (If (Var "e1",
-       If (Var "e2", If (Var "e3", Var "e4", Const (Sexpr (Bool false))),
-	   Const (Sexpr (Bool false))),
-       Const (Sexpr (Bool false))));;
-
-(*Let* *)
-_assert 17.0 "(let* () body)" (Applic (LambdaSimple ([], Var "body"), []));;
-_assert 17.1 "(let* ((e1 v1)) body)" (Applic (LambdaSimple (["e1"], Var "body"), [Var "v1"]));;
-_assert 17.2 "(let* ((e1 v1)(e2 v2)(e3 v3)) body)"
-  (Applic (LambdaSimple (["e1"], Applic (LambdaSimple (["e2"], Applic (LambdaSimple (["e3"], Var "body"),
-   [Var "v3"])), [Var "v2"])), [Var "v1"]));;
-
-
-(*MIT define*)
-(*
-The body shouldn't be used in an applic expression.
-_assert 18.0 "(define (var . arglst) . (body))" (Def (Var "var", LambdaOpt ([],"arglst", Applic (Var "body", []))));;*)
-
-_assert 18.0 "(define (var . arglst) . (body))" (_tag_string "(define var (lambda arglst body))");;
-
-(* equivalent to (define (var . arglst) body)  *)
-
-
-(*Letrec*)
-(*_assert 19.0 "(letrec ((f1 e1)(f2 e2)(f3 e3)) body)"
-  (_tag_string
-     "(let ((f1 'whatever)(f2 'whatever)(f3 'whatever))
-(set! f1 e1) (set! f2 e2) (set! f3 e3)
-(let () body))");;*)
-
-
-    (*
-This output is wrong as the 'body' of the letrec needs to be enclosed in a let expr according to the lectures
-(Applic
- (LambdaSimple (["f1"; "f2"; "f3"],
-   Seq
-    [Set (Var "f1", Var "e1"); Set (Var "f2", Var "e2");
-     Set (Var "f3", Var "e3"); Var "body"]),
- [Const (Sexpr (Symbol "whatever")); Const (Sexpr (Symbol "whatever"));
-      Const (Sexpr (Symbol "whatever"))]));;*)
-
-
-(*Quasiquote*)
-_assert 20.0 "`,x" (_tag_string "x");;
-_assertX 20.01 "`,@x";;
-_assert 20.02 "`(a b)" (_tag_string "(cons 'a (cons 'b '()))");;
-_assert 20.03 "`(,a b)" (_tag_string "(cons a (cons 'b '()))");;
-_assert 20.04 "`(a ,b)" (_tag_string "(cons 'a (cons b '()))");;
-_assert 20.05 "`(,@a b)" (_tag_string "(append a (cons 'b '()))");;
-_assert 20.06 "`(a ,@b)" (_tag_string "(cons 'a (append b '()))");;
-_assert 20.07 "`(,a ,@b)" (_tag_string "(cons a (append b '()))");;
-_assert 20.08 "`(,@a ,@b)" (_tag_string "(append a (append b '()))");;
-_assert 20.09 "`(,@a . ,b)" (_tag_string "(append a b)");;
-_assert 20.10 "`(,a . ,@b)" (_tag_string "(cons a b)");;
-_assert 20.11 "`(((,@a)))" (_tag_string "(cons (cons (append a '()) '()) '())");;
-_assert 20.12 "`#(a ,b c ,d)" (_tag_string "(vector 'a b 'c d)");;
-(*
-_assert 20.15 "`" (_tag_string "");;
-_assert 20.16 "`" (_tag_string "");;
-  _assert 20.17 "`" (_tag_string "");;*)
-
-
-(*Cond*)
-
-(*
-Before the fucking change that the rest of the ribs had to be enclosed in a lambda
-
-_assert 21.0 "(cond (a => b)(c => d))"
-  (_tag_string
-     "(let ((value a)(f (lambda () b)))
-        (if value
-          ((f) value)
-          (let ((value c)(f (lambda () d)))
-            (if value
-  ((f) value)))))");; *)
-
-_assert 21.0 "(cond (e1 => f1) (e2 => f2))"
-  (_tag_string
-     "
-(let
-((value e1)
-(f (lambda () f1))
-(rest (lambda ()
- 
-(let ((value e2)(f (lambda () f2))) (if value ((f) value)))
-
-)))
-(if value ((f) value) (rest)))");;
-
-(* Note: the separated line is the expansion of the second cond rib *)
-
-
-_assert 21.1 "(cond (p1 e1 e2) (p2 e3 e4) (p3 e4 e5))"
-  (_tag_string
-     "(if p1
-        (begin e1 e2)
-        (if p2
-          (begin e3 e4)
-          (if p3
-            (begin e4 e5))))");;
-
-_assert 21.2 "(cond (p1 e1 e2) (p2 e3 e4) (else e5 e6) (BAD BAD BAD))"
-  (_tag_string
-     "(if p1
-        (begin e1 e2)
-        (if p2
-          (begin e3 e4)
-          (begin e5 e6)))");;
-
-
-
-
-
-          (*~~~~~~~~~~~~~~~~~~~~~~~~~~~to scheme to delete!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
-          
-
+exception Incorrect_arg_error;;
 (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
 
 Printf.printf "!!!!! %s !!!!!!" "PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECS";;
@@ -1624,7 +1351,7 @@ let rec is_proper_list s =
    |_-> false;;
  
  (* PLEASE DON'T COPY ANY CODE FROM HERE TO YOUR PROJECTS*)
- exception Incorrect_arg_error;;
+ 
 let all_list_length s =
 
   let rec loop lst len =
@@ -1725,11 +1452,8 @@ let rec to_scheme2 expr =
 
    (* AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA   *)                              
                                                        
-    
-         to_scheme   ((Pair(Symbol "letrec", Pair(Nil, Pair(Symbol "g", Pair(Symbol "f", Nil)))))) ;;      
-         
-         
-         to_scheme ((Pair(Symbol "let*", Pair(Pair(Pair(Symbol "s", Pair(Number (Int 4), Nil)), Pair(Pair(Symbol "y", Pair(String "s", Nil)), Pair(Pair(Symbol "r", Pair(Char 'g', Nil)), Nil))), Pair(Symbol "g", Pair(Symbol "f", Pair(Number (Int 3), Nil)))))));;
-         
-         to_scheme2      (   Applic(LambdaSimple([ "s" ],Applic(LambdaSimple([ "y" ],Seq([ LambdaSimple([ "r" ],Seq([ Var("g"); Var("f"); Const(Sexpr(Number(Int(3)))) ])); Const(Sexpr(Char('g'))) ])),[ Const(Sexpr(String("s"))) ])),[ Const(Sexpr(Number(Int(4)))) ])  )   ;;
-(*~~~~~~~~~~~~~~~~~~~~~~~~~~~ end to scheme to delete!!!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+                                          
+    to_scheme (      (Pair(Symbol "cond", Pair(Pair(Symbol "f", Pair(Symbol "g", Nil)), Pair(Pair(Symbol "else", Pair(Symbol "g", Pair(Symbol "hh", Nil))), Pair(Pair(Symbol "f", Pair(Symbol "=>", Pair(Symbol "g", Nil))), Nil))))))      ;;
+
+     to_scheme2 ( Applic(Var("cons"),[ Const(Sexpr(Symbol("quote"))); Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Const(Sexpr(Pair(Pair(Pair(Pair(Pair(Symbol("unquote-splicing"),Pair(Pair(Number(Int(5)),Nil),Nil)),Nil),Nil),Nil),Nil))); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Applic(Var("cons"),[ Const(Sexpr(Pair(Pair(Pair(String("hello"),Nil),Nil),Nil))); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]); Const(Sexpr(Nil)) ]) ]); Const(Sexpr(Nil)) ]) ]));;
+                 
