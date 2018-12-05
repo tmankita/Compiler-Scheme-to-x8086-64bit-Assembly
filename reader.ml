@@ -1,5 +1,4 @@
 
-
 (* reader.ml
  * A compiler from Scheme to x86/64
  *
@@ -40,7 +39,10 @@
    | Vector(l1), Vector(l2) -> List.for_all2 sexpr_eq l1 l2
    | _ -> false;;
 
-  
+      
+
+
+ 
 
 module Reader: sig
   val read_sexpr : string -> sexpr
@@ -56,8 +58,6 @@ end
 	s) then str
   else Printf.sprintf "|%s|" str;;
   
-
-     
   let lowercase_ascii_help  =
     let delta = int_of_char 'A' - int_of_char 'a' in
     fun ch ->
@@ -89,6 +89,9 @@ end
 
   let _boolean_ = make_spaced (PC.caten _hashSymbol_ (PC.one_of_ci "tf"));;
 
+
+  let nt_symbol =  make_spaced ((PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:")) );;
+
   let correct_boolean e = 
     let ( symbol , be) = e in         
     if (be = 't' || be ='T') then Bool(true)
@@ -108,7 +111,7 @@ end
     
       let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
     
-      let nt_integer= make_spaced (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e));;
+      let nt_integer= PC.not_followed_by (make_spaced (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e))) (nt_symbol);;
     
     let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
     
@@ -203,7 +206,7 @@ let make_floating_point =
 
  let nt_right_side_hex_floating_point = PC.caten decimal_point (PC.plus (PC.one_of_ci "0123456789abcdef"));;
 
- let nt_HexFloat= make_spaced (PC.caten nt_HexInteger nt_right_side_hex_floating_point);;
+ let nt_HexFloat= PC.not_followed_by (make_spaced (PC.caten nt_HexInteger nt_right_side_hex_floating_point)) (nt_symbol);;
 
  
  let concat_hex left right= String.concat "" ["0x" ; (list_to_string left) ; "." ; (list_to_string right)];; 
@@ -224,9 +227,6 @@ let make_floating_point =
 
 
 
-
-let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:"));;
-
  let correct_symbol symbol s = 
   (Symbol(list_to_string (List.map lowercase_ascii symbol )),s);;
 
@@ -238,7 +238,7 @@ let nt_symbol =  make_spaced (PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0
 
   let nt_CharPrefix = PC.caten _hashSymbol_ nt_slash;;
   let nt_VisibleSimpleChar =make_spaced (PC.caten nt_CharPrefix (PC.diff PC.nt_any PC.nt_whitespace));;
-  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word_ci "newline"); (PC.word_ci "nul"); (PC.word_ci "page"); (PC.word "return"); (PC.word_ci "space"); (PC.word "tab");(PC.word "double quote");(PC.word_ci "\\\\");(PC.word "\"");(PC.word_ci "f"); (PC.word "t"); (PC.word_ci "r"); (PC.word_ci "n")] ));;
+  let nt_NamedChar = make_spaced (PC.caten nt_CharPrefix (PC.disj_list [(PC.word_ci "newline"); (PC.word_ci "nul"); (PC.word_ci "page"); (PC.word_ci "return"); (PC.word_ci "space"); (PC.word_ci "tab");(PC.word_ci "double quote")] ));;
   let nt_HexChar= make_spaced (PC.caten nt_CharPrefix (PC.caten nt_x (PC.plus (PC.one_of_ci "0123456789abcdef")))) ;;
   
 
@@ -342,6 +342,7 @@ let build_string e =
   let (q_1, (sen, q_2)) = e in
   String (String.concat "" [list_to_string (List.map (fun l -> (List.nth l 0)) sen)]);;
 
+  let make_Number= make_spaced( (PC.disj_list [make_floating_point; make_HexFloat;make_integer]) ) ;;
 
 
 
@@ -358,9 +359,12 @@ let build_string e =
 
   let rec nt_sexpr_three_dotted = 
     function 
-     |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD; make_NumberD; make_StringD ; make_symbolD;  make_DottedlistD;make_listD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
+     |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD;  make_Number;  make_symbolD;  make_StringD ;   make_DottedlistD;make_listD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
      (fun (nil1,(sexpr,nil2)) -> sexpr)
- 
+    
+
+
+
      and make_NilD = 
        fun s->
        let (e,s) = (nt_Nil s) in
@@ -379,7 +383,7 @@ let build_string e =
        let (e,s)=  (nt_String s) in
         ((build_string e),s)
 
-   and make_CharD = PC.disj_list [make_NamedChar;  make_HexChar; make_VisibleSimpleChar ]
+   and make_CharD = PC.disj_list [make_NamedChar;  make_HexChar ; make_VisibleSimpleChar ]
 
    and make_symbolD = 
        fun s->
@@ -387,7 +391,7 @@ let build_string e =
 
         correct_symbol e rest
 
-   and make_NumberD= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
+
 
    and make_booleanD = 
        fun s->
@@ -473,12 +477,15 @@ let build_string e =
 
 
          let three_dots= make_spaced (PC.word "...");;
+
      
      let rec nt_sexpr = 
      function
-      |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char; make_Number; make_String ; make_symbol;  make_list; make_Dottedlist; make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) 
-                        (fun (  (nil1 , ( sexpr , nil2 ) )) ->  sexpr)
+      |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;   make_list; make_Dottedlist; make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
+                        (fun (  (nil1 , ( sexpr , nil2 ) ), opt ) ->  sexpr)
   
+
+
       and make_Nil = 
         fun s->
         let (e,s) = (nt_Nil s) in
@@ -505,7 +512,6 @@ let build_string e =
 
          correct_symbol e rest
 
-    and make_Number= PC.disj_list [make_floating_point; make_HexFloat;make_integer]
 
     and make_boolean = 
         fun s->
@@ -592,8 +598,7 @@ let build_string e =
 let build_list listOflist  = List.filter (fun list-> (List.length list != 1) || ( List.hd list != '(' && List.hd list != ')' && List.hd list != '.')) listOflist;;
 
 
-  
- 
+
 let read_sexprs string = 
   let charList = (string_to_list string) in
 
@@ -619,10 +624,6 @@ let read_sexpr string =
   else raise X_this_should_not_happen  
   with PC.X_no_match -> raise PC.X_no_match ;;
 
-
-
  
 end;; (* struct Reader *)
-
-
 
