@@ -1645,8 +1645,8 @@ let rec make_lamda_body =
         fun (list1,list2)->
         match list1,list2 with
         |[],[]->[]
-        |[],_->raise X_this_should_not_happen
-        |_,[]->raise X_this_should_not_happen
+        |[],l2->l2
+        |l1,[]->l1
         |car1::cdr1,car2::cdr2-> if(String.equal car1 "") then (List.concat [[car2];(make_list_of_params(cdr1,cdr2))]) else (List.concat [[car1];(make_list_of_params(cdr1,cdr2))]);;
 
   let rec make_box=
@@ -1702,27 +1702,8 @@ let rec make_lamda_body =
     |_->expr';;
   
 
-    (*(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (set! x (* x y))) "))));;
+  
 
-      let expr111= (make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (cons x (lambda () (set! x y) ) )) ")))) in
-    match expr111 with
-    |LambdaSimple'(params,body)->
-    let listOfLambdaListByParam =(List.map (fun p-> (p,make_list_of_lambdas (body,p)) ) params ) in
-    let list_Of_paris_Of_Getters_And_Setters_By_Param = (List.map   (fun (p,listByParam)-> (p,make_lambdas_list_of_getters (listByParam,p),(make_lambdas_list_of_setters(listByParam,p))))   listOfLambdaListByParam) in
-    let exist_setter_and_getter_Each_from_another_clousere_by_param = (List.map (fun (p,getters,setters)-> (p,exsitDiffrent(getters,setters))) list_Of_paris_Of_Getters_And_Setters_By_Param) in
-    let list_of_bounds_by_param =(List.map (fun (p,listLambda)->(p,(List.flatten (List.map (fun lambda->match lambda with |LambdaSimple'(_,body)-> makeListBoundByParam( body,p) |LambdaOpt'(_,_,body)->makeListBoundByParam( body,p) |_->raise X_this_should_not_happen) listLambda)))) listOfLambdaListByParam) ;;
-
-    let list_of_bounds_that_raise_suspicious= (List.map (fun (p,listOfMajor)-> (p,(List.filter (fun num-> num=0 ) listOfMajor))) list_of_bounds_by_param) in
-    let need_to_box_by_getters_and_setters= (List.map  (fun (p,answer)->if(answer=true) then p else "")   exist_setter_and_getter_Each_from_another_clousere_by_param) in
-    let need_to_box_by_bounds=(List.map (fun (p,listInt)-> if((List.length listInt) > 1) then p else "" ) list_of_bounds_that_raise_suspicious) in
-    let intersection_need_to_box_index_save = (make_intersection (need_to_box_by_bounds,need_to_box_by_getters_and_setters)) in
-    let intersection_need_to_box_unIndex=(List.filter (fun s-> not(String.equal "" s)) intersection_need_to_box_index_save) in
-    let list_of_varParam_by_param=(List.map (fun p-> (p,makeListVarParamByParam(body,p)) ) params) in
-    let need_to_box_param_and_bound_index_save= make_list_PAB_need_to_box(list_of_varParam_by_param,list_of_bounds_by_param) in
-    let need_to_box_param_and_bound_unIndex=(List.filter (fun s-> not(String.equal "" s)) need_to_box_param_and_bound_index_save) in
-    let new_body_case_1=(update_GAS_list_of_param (body,need_to_box_param_and_bound_unIndex)) in
-    let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,intersection_need_to_box_unIndex)) in
-    let list_set_box= (make_list_of_sets(intersection_need_to_box_index_save,new_body_case_2,0)) in *)
 
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (list (lambda () x) (lambda (y) (set! x y)) ))"))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (set! x (* x y))) "))));;
@@ -1732,7 +1713,13 @@ let rec make_lamda_body =
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (lambda (op) (cond ((eq? op 'read) (lambda () x)) ((eq? op 'write) (lambda (val) (set! x val))))))"))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (let ((y 1)) `(,(lambda () x) ,(set! x y)) )  )"))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (cons x (lambda () (set! x y) ) ))"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y z) (list )"))));;
+    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y z) 
+                                                                              (list 
+                                                                                (lambda () 
+                                                                                  (list (lambda (x) (set! x z)) 
+                                                                                        (lambda () (set! x z))
+                                                                                         x))
+                                                                                (lambda (y) (set! x y))))"))));;
 
 
 exception X_syntax_error;;
@@ -1750,7 +1737,7 @@ let annotate_lexical_addresses e = make_expr' e;;
 
 let annotate_tail_calls e = make_tail_call e;;
 
-let box_set e = raise X_not_yet_implemented;;
+let box_set e = make_box e;;
 
 let run_semantics expr =
   box_set
