@@ -1454,7 +1454,8 @@ let rec make_lamda_body =
        |Seq'(exprList)-> let last= (List.nth exprList ((List.length exprList)-1)) in( make_tail_seq (last,exprList))
        |Or'(exprList)-> let last= (List.nth exprList ((List.length exprList)-1)) in (make_tail_or (last,exprList)) 
        |Set'(a,b)-> Set'(a , make_tail_call b) 
-       |Applic'(a,listb)-> Applic'(make_tail_call a,(List.map (fun s->make_tail_call s ) listb))          
+       |Applic'(a,listb)-> Applic'(make_tail_call a,(List.map (fun s->make_tail_call s ) listb)) 
+       |Def'(a,b)->Def'(a,make_tail_call b)         
        |_-> exprTag
 
       and make_tail_seq =
@@ -1586,18 +1587,18 @@ let rec make_lamda_body =
                                   else (List.concat [[""]; (make_intersection (cdr1,cdr2))]);;
 
   let rec make_list_of_sets = 
-    fun (needToBox,body,index)->
+    fun (needToBox,index)->
       match needToBox with
-      |[]-> [body]
-      |car::cdr-> if(not(String.equal car "")) then  ((List.concat [[ Set'(Var'(VarParam(car,index)),Box'(VarParam(car,index))) ]; make_list_of_sets (cdr,body,index+1)]))  else  make_list_of_sets(cdr,body,index+1) ;;
+      |[]-> []
+      |car::cdr-> if(not(String.equal car "")) then  ((List.concat [[ Set'(Var'(VarParam(car,index)),Box'(VarParam(car,index))) ]; make_list_of_sets (cdr,index+1)]))  else  make_list_of_sets(cdr,index+1) ;;
 
   let rec update_getter_and_setters =
     fun (expr',paramName)->
     match expr' with
     |Var'(VarBound(c,mj,mi))-> if(String.equal c paramName) then (BoxGet'(VarBound(c,mj,mi))) else expr'
     |Var'(VarParam(c,index))-> if(String.equal c paramName) then (BoxGet'(VarParam(c,index))) else expr'
-    |Set'(Var'(VarBound(c,mj,mi)),expr)->  if(String.equal c paramName) then (BoxSet'(VarBound(c,mj,mi),expr)) else expr'
-    |Set'(Var'(VarParam(c,index)) ,expr)->   if(String.equal c paramName) then (BoxSet'((VarParam(c,index)),expr)) else expr'
+    |Set'(Var'(VarBound(c,mj,mi)),expr)->  if(String.equal c paramName) then (BoxSet'(VarBound(c,mj,mi), update_getter_and_setters(expr,paramName))) else Set'(Var'(VarBound(c,mj,mi)),update_getter_and_setters(expr,paramName))
+    |Set'(Var'(VarParam(c,index)) ,expr)->   if(String.equal c paramName) then (BoxSet'((VarParam(c,index)),update_getter_and_setters(expr,paramName))) else Set'(Var'(VarParam(c,index)) ,update_getter_and_setters(expr,paramName))
     |LambdaSimple'(params,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then expr' else LambdaSimple'(params,update_getter_and_setters(body,paramName))  
     |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) (List.concat [[opt];params])) != 0 )) then expr' else LambdaOpt'(params,opt,update_getter_and_setters(body,paramName))
     |Seq'(exprList)-> Seq'(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList)
@@ -1607,13 +1608,13 @@ let rec make_lamda_body =
     |Applic'(expr,exprList)->  Applic'(update_getter_and_setters(expr,paramName),(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList))
     |ApplicTP' (expr,exprList)-> ApplicTP'(update_getter_and_setters(expr,paramName),(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList))
     |_->expr';;
-
+(*G for getter and S for setter*)
     let rec update_GAS_list_of_param =
       fun (expr',paramList)->
       match paramList with
       |[]->expr'
       |car::cdr-> update_GAS_list_of_param( update_getter_and_setters(expr',car),cdr );;
-
+(*P for param and B for bound*)
       let rec make_list_PAB_need_to_box=
         fun (varParamList,varBoundList)->
         match varParamList,varBoundList with
@@ -1649,6 +1650,16 @@ let rec make_lamda_body =
         |l1,[]->l1
         |car1::cdr1,car2::cdr2-> if(String.equal car1 "") then (List.concat [[car2];(make_list_of_params(cdr1,cdr2))]) else (List.concat [[car1];(make_list_of_params(cdr1,cdr2))]);;
 
+  let make_return_value =
+    fun (expr',new_body,list_set_box) ->
+match expr',new_body with
+(*|LambdaSimple'(params,_),Seq'(exprlist)-> LambdaSimple'(params,Seq'(List.concat [list_set_box; exprlist]))
+|LambdaOpt'(params,opt,_),Seq'(exprlist)-> LambdaOpt'(params , opt , Seq'(List.concat [list_set_box; exprlist]))*)
+|LambdaSimple'(params,_),body-> LambdaSimple'(params,Seq'(List.concat [list_set_box; [body]]))
+|LambdaOpt'(params,opt,_),body->LambdaOpt'(params,opt,Seq'(List.concat [list_set_box; [body]]))
+|_->raise X_this_should_not_happen;;
+
+
   let rec make_box=
     fun expr'->
     match expr' with
@@ -1667,8 +1678,8 @@ let rec make_lamda_body =
                                   let new_body_case_1=(update_GAS_list_of_param (body,need_to_box_param_and_bound_unIndex)) in
                                   let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,intersection_need_to_box_unIndex)) in
                                   let list_of_params_need_sets=make_list_of_params(intersection_need_to_box_index_save,need_to_box_param_and_bound_index_save) in
-                                  let list_set_box= (make_list_of_sets(list_of_params_need_sets,new_body_case_2,0)) in 
-                                  if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then LambdaSimple'(params,Seq'(list_set_box)) else expr'
+                                  let list_set_box= (make_list_of_sets(list_of_params_need_sets,0)) in 
+                                  if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then make_return_value(expr',new_body_case_2,list_set_box) else expr'
 
 
 
@@ -1689,13 +1700,13 @@ let rec make_lamda_body =
                                     let new_body_case_1=(update_GAS_list_of_param (body,need_to_box_param_and_bound_unIndex)) in
                                     let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,intersection_need_to_box_unIndex)) in
                                     let list_of_params_need_sets=make_list_of_params(intersection_need_to_box_index_save,need_to_box_param_and_bound_index_save) in
-                                    let list_set_box= (make_list_of_sets(list_of_params_need_sets,new_body_case_2,0)) in 
-                                    if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then  LambdaOpt'(params1,opt,Seq'(list_set_box))  else expr'
+                                    let list_set_box= (make_list_of_sets(list_of_params_need_sets,0)) in 
+                                    if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then  make_return_value(expr',new_body_case_2,list_set_box)  else expr'
                                   
     |Seq'(exprList)-> Seq'(List.map (fun expr->make_box(expr)) exprList)
     |If'(_test,_then,_else)-> If'(make_box(_test),make_box(_then),make_box(_else))
-    |Set'(a,b)->Set'(make_box(a),make_box(a))
-    |Def'(a,b)-> Def'(make_box(a),make_box(a))
+    |Set'(a,b)->Set'(make_box(a),make_box(b))
+    |Def'(a,b)-> Def'(make_box(a),make_box(b))
     |Or' (exprList)->  Or'(List.map (fun expr->make_box(expr)) exprList)
     |Applic'(expr,exprList)->  Applic'(make_box(expr),(List.map (fun expr->make_box(expr)) exprList))
     |ApplicTP' (expr,exprList)-> ApplicTP'(make_box(expr),(List.map (fun expr->make_box(expr)) exprList))
@@ -1704,8 +1715,9 @@ let rec make_lamda_body =
 
   
 
+ (* struct Semantics *)
 
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (list (lambda () x) (lambda (y) (set! x y)) ))"))));;
+    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(define foo1 (lambda (x) (list (lambda () x) (lambda (y) (set! x y)) )))"))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (set! x (* x y))) "))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (lambda () x) (lambda () y) (lambda () (set! x y)) )"))));;
     make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (if x (lambda () (set! y x)) (lambda (z) (set! x z))) ) "))));;
@@ -1745,3 +1757,9 @@ let run_semantics expr =
        (annotate_lexical_addresses expr));;
   
 end;; (* struct Semantics *)
+
+Semantics.run_semantics (Tag_Parser.tag_parse_expression (Reader.read_sexpr "
+(define foo1 (lambda (x)
+                          (list (lambda () x)
+                                (lambda (y) 
+                                  (set! x y)))))"));;

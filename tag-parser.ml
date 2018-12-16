@@ -469,6 +469,7 @@ let reserved_word_list =
           fun sexpr->
         match sexpr with
         |Nil->Nil
+        |Pair(Symbol("quote"),_)->sexpr
         |Pair(car,Nil)-> macro_Expender ()(Pair((macro_Expender () (nt_expand car)),Nil))
         |Pair(car,cdr)-> macro_Expender ()(Pair((macro_Expender () (nt_expand car)) , (macro_Expender () (nt_expand cdr))))
         |c -> c;;
