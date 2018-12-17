@@ -1476,19 +1476,16 @@ let rec make_lamda_body =
         |LambdaSimple'(params,Applic'(e,eList))->make_tail_call exprTag
         |LambdaOpt'(params,opt,Applic'(e,eList))->make_tail_call exprTag
         |_->exprTag;;
-   
-
-           
-
+     
 
 
  let rec make_list_of_lambdas = 
   fun (expr',paramName)->
   match expr' with
-  |LambdaSimple'(params,body)-> if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then ([]) else  (List.concat [[expr']; (make_list_of_lambdas (body,paramName)) ])
-  |LambdaOpt' (params,opt,body)-> if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then ([]) else  (List.concat [[expr']; (make_list_of_lambdas (body,paramName)) ])
+  |LambdaSimple'(params,body)-> if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then ([]) else  ( [expr']) (*(List.concat [[expr']; (make_list_of_lambdas (body,paramName)) ])*)
+  |LambdaOpt' (params,opt,body)-> if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then ([]) else  ( [expr']) (*(List.concat [[expr']; (make_list_of_lambdas (body,paramName)) ])*)
   |Seq'(exprList)-> (List.flatten (List.map  make_list_of_lambdas (List.map (fun expr->(expr,paramName)) exprList) ))
-  |If'(_,_then,_else)-> (List.flatten (List.map  make_list_of_lambdas (List.map (fun expr->(expr,paramName)) [_then;_else]) ))
+  |If'(_test,_then,_else)-> (List.flatten (List.map  make_list_of_lambdas (List.map (fun expr->(expr,paramName)) [_test;_then;_else]) ))
   | Set'(_,b)-> make_list_of_lambdas (b,paramName)
   | Def'(_,b)-> make_list_of_lambdas (b,paramName)
   | Or' (exprList)-> (List.flatten (List.map  make_list_of_lambdas (List.map (fun expr->(expr,paramName)) exprList) ))
@@ -1496,48 +1493,58 @@ let rec make_lamda_body =
   | ApplicTP' (expr,exprList)-> (List.flatten (List.map  make_list_of_lambdas (List.map (fun expr->(expr,paramName)) (List.concat [[expr];exprList]) )))
   |_->[];;
 
+  let rec hasGetter = 
+  fun (expr',paramName)->
+  match expr' with 
+  |Var'(VarBound(c,_,_))->  String.equal paramName c 
+  |LambdaSimple'(params,body)-> (*if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else*) (hasGetter (body,paramName))
+  |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else (hasGetter (body,paramName))
+  |Seq'(exprList)->(ormap (fun expr-> hasGetter (expr,paramName)) exprList)
+  |If'(_test,_then,_else)-> (ormap (fun expr-> hasGetter (expr,paramName)) [_test;_then;_else])
+  |Set'(_,b)-> (hasGetter (b,paramName))
+  |Def'(_,b)-> (hasGetter (b,paramName))
+  |Or' (exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) exprList)
+  |Applic'(expr,exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) (List.concat [[expr];exprList]))
+  |ApplicTP' (expr,exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) (List.concat [[expr];exprList]))
+  |_->false;;
+
+
+  let print_toupleBol =
+    fun (p,b)->
+    print_string(" (");print_string(p);print_string(") ");
+    match b with 
+    | true ->print_string("t, ")
+    | false-> print_string("f, ");;
+
 
   let rec make_lambdas_list_of_getters =
     fun (lambdasList , paramName) ->
     match lambdasList with
     |[]->[]
-    |car::cdr-> if (hasGetter (car,paramName)) then (List.concat [[car]; make_lambdas_list_of_getters (cdr,paramName)]) else  (make_lambdas_list_of_getters (cdr,paramName))
+    |car::cdr-> if (hasGetter (car,paramName)) then (List.concat [[car]; make_lambdas_list_of_getters (cdr,paramName)]) else  (make_lambdas_list_of_getters (cdr,paramName));;
 
-    and hasGetter = 
+
+
+    let rec hasSetter = 
     fun (expr',paramName)->
     match expr' with 
-    |Var'(VarBound(c,_,_))-> String.equal paramName c 
-    |LambdaSimple'(params,body)-> if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else (hasGetter (body,paramName))
-    |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else (hasGetter (body,paramName))
-    |Seq'(exprList)->(ormap (fun expr-> hasGetter (expr,paramName)) exprList)
-    |If'(_,_then,_else)-> (ormap (fun expr-> hasGetter (expr,paramName)) [_then;_else])
-    |Set'(_,b)-> (hasGetter (b,paramName))
-    |Def'(_,b)-> (hasGetter (b,paramName))
-    |Or' (exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) exprList)
-    |Applic'(expr,exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) (List.concat [[expr];exprList]))
-    |ApplicTP' (expr,exprList)-> (ormap (fun expr-> hasGetter (expr,paramName)) (List.concat [[expr];exprList]))
+    |Set'(Var'(VarBound(c,_,_)),b)-> if (String.equal paramName c) then true else (hasSetter (b,paramName))
+    |LambdaSimple'(params,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else (hasSetter (body,paramName))
+    |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) (List.concat [[opt];params])) != 0 )) then false else (hasSetter (body,paramName))
+    |Seq'(exprList)->(ormap (fun expr-> hasSetter (expr,paramName)) exprList)
+    |If'(_test,_then,_else)-> (ormap (fun expr-> hasSetter (expr,paramName)) [_test;_then;_else])
+    |Def'(_,b)-> (hasSetter (b,paramName))
+    |Or' (exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) exprList)
+    |Applic'(expr,exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) (List.concat [[expr];exprList])) 
+    |ApplicTP' (expr,exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) (List.concat [[expr];exprList]))
     |_->false;;
 
     let rec make_lambdas_list_of_setters =
       fun (lambdasList , paramName) ->
       match lambdasList with
       |[]->[]
-      |car::cdr-> if (hasSetter (car,paramName)) then (List.concat [[car]; make_lambdas_list_of_setters (cdr,paramName)]) else  (make_lambdas_list_of_setters (cdr,paramName))
+      |car::cdr-> if (hasSetter (car,paramName)) then (List.concat [[car]; make_lambdas_list_of_setters (cdr,paramName)]) else  (make_lambdas_list_of_setters (cdr,paramName));;
   
-      and hasSetter = 
-      fun (expr',paramName)->
-      match expr' with 
-      |Set'(Var'(VarBound(c,_,_)),b)-> if (String.equal paramName c) then true else (hasSetter (b,paramName))
-      |LambdaSimple'(params,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then false else (hasSetter (body,paramName))
-      |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) (List.concat [[opt];params])) != 0 )) then false else (hasSetter (body,paramName))
-      |Seq'(exprList)->(ormap (fun expr-> hasSetter (expr,paramName)) exprList)
-      |If'(_,_then,_else)-> (ormap (fun expr-> hasSetter (expr,paramName)) [_then;_else])
-      |Def'(_,b)-> (hasSetter (b,paramName))
-      |Or' (exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) exprList)
-      |Applic'(expr,exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) (List.concat [[expr];exprList])) 
-      |ApplicTP' (expr,exprList)-> (ormap (fun expr-> hasSetter (expr,paramName)) (List.concat [[expr];exprList]))
-      |_->false;;
-
       
 
       let rec atLeastOneDiffrentInList =
@@ -1556,7 +1563,7 @@ let rec make_lamda_body =
           |Var'(VarBound(c,mj,_))-> if(String.equal p c) then [mj] else []
           |Set'(a,b)-> (List.concat [(makeListBoundByParam(a,p));(makeListBoundByParam(b,p))])
           |Seq'(exprList)->(List.flatten (List.map (fun e->( makeListBoundByParam(e,p))) exprList))
-          |If'(_,_then,_else)-> (List.flatten (List.map (fun e->( makeListBoundByParam(e,p))) [_then;_else]))
+          |If'(_test,_then,_else)-> (List.flatten (List.map (fun e->( makeListBoundByParam(e,p))) [_test;_then;_else]))
           |Def'(_,b)-> makeListBoundByParam (b,p)
           |Or' (exprList)-> (List.flatten (List.map (fun e->( makeListBoundByParam(e,p))) exprList))
           |Applic'(expr,exprList)->  (List.flatten (List.map (fun e->( makeListBoundByParam(e,p))) (List.concat [[expr];exprList])))
@@ -1566,10 +1573,10 @@ let rec make_lamda_body =
           let rec makeListVarParamByParam=
             fun (expr',p)->
             match expr' with
-            |Var'(VarParam(c,index))-> if(String.equal p c) then [c] else []
+            |Var'(VarParam(c,index))->  if(String.equal p c) then [c] else []
             |Set'(a,b)-> (List.concat [(makeListVarParamByParam(a,p));(makeListVarParamByParam(b,p))])
-            |Seq'(exprList)->(List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) exprList))
-            |If'(_,_then,_else)-> (List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) [_then;_else]))
+            |Seq'(exprList)-> (List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) exprList))
+            |If'(_test,_then,_else)-> (List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) [_test;_then;_else]))
             |Def'(_,b)-> makeListVarParamByParam (b,p)
             |Or' (exprList)-> (List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) exprList))
             |Applic'(expr,exprList)->  (List.flatten (List.map (fun e->( makeListVarParamByParam(e,p))) (List.concat [[expr];exprList])))
@@ -1586,6 +1593,18 @@ let rec make_lamda_body =
                                 then (List.concat [[car1]; (make_intersection (cdr1,cdr2))]) 
                                   else (List.concat [[""]; (make_intersection (cdr1,cdr2))]);;
 
+  let rec make_union= 
+    fun (list1,list2)->
+    match list1,list2 with
+    |[],[]-> []
+    |_,[] -> raise X_this_should_not_happen
+    |[],_ -> raise X_this_should_not_happen
+    |car1::cdr1, car2::cdr2 -> if(String.equal car1 car2) 
+                                then (List.concat [[car1]; (make_union (cdr1,cdr2))]) 
+                                  else (if (String.equal car1 "") 
+                                         then  List.concat [[car2]; (make_union (cdr1,cdr2))] 
+                                          else List.concat [[car1]; (make_union (cdr1,cdr2))]);;
+
   let rec make_list_of_sets = 
     fun (needToBox,index)->
       match needToBox with
@@ -1599,6 +1618,7 @@ let rec make_lamda_body =
     |Var'(VarParam(c,index))-> if(String.equal c paramName) then (BoxGet'(VarParam(c,index))) else expr'
     |Set'(Var'(VarBound(c,mj,mi)),expr)->  if(String.equal c paramName) then (BoxSet'(VarBound(c,mj,mi), update_getter_and_setters(expr,paramName))) else Set'(Var'(VarBound(c,mj,mi)),update_getter_and_setters(expr,paramName))
     |Set'(Var'(VarParam(c,index)) ,expr)->   if(String.equal c paramName) then (BoxSet'((VarParam(c,index)),update_getter_and_setters(expr,paramName))) else Set'(Var'(VarParam(c,index)) ,update_getter_and_setters(expr,paramName))
+    |Set'(Var'(VarFree(c)) ,expr)-> Set'(Var'(VarFree(c)) ,update_getter_and_setters(expr,paramName))
     |LambdaSimple'(params,body)->if((List.length (List.filter (fun p-> String.equal p paramName) params) != 0 )) then expr' else LambdaSimple'(params,update_getter_and_setters(body,paramName))  
     |LambdaOpt'(params,opt,body)->if((List.length (List.filter (fun p-> String.equal p paramName) (List.concat [[opt];params])) != 0 )) then expr' else LambdaOpt'(params,opt,update_getter_and_setters(body,paramName))
     |Seq'(exprList)-> Seq'(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList)
@@ -1607,6 +1627,7 @@ let rec make_lamda_body =
     |Or' (exprList)->  Or'(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList)
     |Applic'(expr,exprList)->  Applic'(update_getter_and_setters(expr,paramName),(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList))
     |ApplicTP' (expr,exprList)-> ApplicTP'(update_getter_and_setters(expr,paramName),(List.map (fun expr->update_getter_and_setters(expr,paramName)) exprList))
+    |BoxSet'(a,b)-> BoxSet'(a,update_getter_and_setters (b,paramName))
     |_->expr';;
 (*G for getter and S for setter*)
     let rec update_GAS_list_of_param =
@@ -1626,11 +1647,10 @@ let rec make_lamda_body =
         let rec print_stringList =
       fun l->
       match l with 
-      | [] ->print_string("]\n")
+      | [] ->print_string("]")
       | car::cdr->print_string(car);print_string(", "); print_stringList cdr;;
       let rec print_intList =
         fun l->
-        
         match l with 
         | [] ->print_string("]\n")
         | car::cdr->print_int(car);print_string(", "); print_intList cdr;;
@@ -1642,6 +1662,15 @@ let rec make_lamda_body =
         | [] ->print_string("]\n")
         | car::cdr->print_int car; print_toupleintList (p,cdr);;
 
+       
+
+          let rec print_ListToupleBolList = 
+            fun listT->
+            print_string(" [");
+            match listT with
+            |[]->print_string("]\n")
+            |car::cdr-> print_toupleBol car; print_ListToupleBolList cdr;;
+
       let rec make_list_of_params = 
         fun (list1,list2)->
         match list1,list2 with
@@ -1650,58 +1679,85 @@ let rec make_lamda_body =
         |l1,[]->l1
         |car1::cdr1,car2::cdr2-> if(String.equal car1 "") then (List.concat [[car2];(make_list_of_params(cdr1,cdr2))]) else (List.concat [[car1];(make_list_of_params(cdr1,cdr2))]);;
 
-  let make_return_value =
-    fun (expr',new_body,list_set_box) ->
-match expr',new_body with
-(*|LambdaSimple'(params,_),Seq'(exprlist)-> LambdaSimple'(params,Seq'(List.concat [list_set_box; exprlist]))
-|LambdaOpt'(params,opt,_),Seq'(exprlist)-> LambdaOpt'(params , opt , Seq'(List.concat [list_set_box; exprlist]))*)
-|LambdaSimple'(params,_),body-> LambdaSimple'(params,Seq'(List.concat [list_set_box; [body]]))
-|LambdaOpt'(params,opt,_),body->LambdaOpt'(params,opt,Seq'(List.concat [list_set_box; [body]]))
-|_->raise X_this_should_not_happen;;
 
+
+let check_if_equal =
+  fun (l1,l2)->
+  if(try ((expr'_eq l1 l2)) with Invalid_argument _ -> false) then true else false;;
+
+let rec make_list_of_the_same_lambdas=
+  fun (lambda_list) ->
+  match lambda_list with
+  |[]->[]
+  |car::cdr-> (List.flatten(List.map (fun l-> if (check_if_equal (l,car))  then (List.concat [[car];(make_list_of_the_same_lambdas cdr)])  else (make_list_of_the_same_lambdas cdr) ) cdr));;
+  
+  let print_ListTouplesStringAndStringlList = 
+    fun (s,sL)->
+    print_string("(");print_string s;print_string("[");print_stringList sL;print_string(")");;
+    
+
+  let rec print_toupleListOfStringAndStringList =
+    fun toupleList->
+    match toupleList with
+    |[]->print_string "]\n"
+    |car::cdr-> print_ListTouplesStringAndStringlList car; print_toupleListOfStringAndStringList cdr ;;
 
   let rec make_box=
     fun expr'->
     match expr' with
     |LambdaSimple'(params,body)-> let listOfLambdaListByParam = (List.map (fun p-> (p,make_list_of_lambdas (body,p)) ) params ) in
                                   let list_Of_paris_Of_Getters_And_Setters_By_Param = (List.map   (fun (p,listByParam)-> (p,make_lambdas_list_of_getters (listByParam,p),(make_lambdas_list_of_setters(listByParam,p))))   listOfLambdaListByParam) in
+                                  let list_Of_paris_Of_Setters_By_Param = (List.map   (fun (p,listByParam)-> (p,(make_lambdas_list_of_setters(listByParam,p))))   listOfLambdaListByParam) in
+                                  let list_of_params_that_have_setters = (List.map (fun (p,setList)->if((List.length setList)!=0)then p else "") list_Of_paris_Of_Setters_By_Param) in
+                                  let list_of_same_lambdas_by_param=(List.map (fun (p,listLambdas)->(p,make_list_of_the_same_lambdas listLambdas)) listOfLambdaListByParam) in
+                                  let raise_suspicious_by_same_lambda=(List.map   (fun (p,listByParam)-> (p,(List.filter (fun l-> (hasGetter (l,p))&&(hasSetter (l,p))) listByParam)))   list_of_same_lambdas_by_param) in
+                                  let need_to_box_by_same_lambda=(List.map (fun (p,listExpr)-> if((List.length listExpr) > 0) then p else "" ) raise_suspicious_by_same_lambda) in
                                   let exist_setter_and_getter_Each_from_another_clousere_by_param = (List.map (fun (p,getters,setters)-> (p,exsitDiffrent(getters,setters))) list_Of_paris_Of_Getters_And_Setters_By_Param) in
-                                  let list_of_bounds_by_param =(List.map (fun (p,listLambda)->(p,(List.flatten (List.map (fun lambda->match lambda with |LambdaSimple'(_,body)-> makeListBoundByParam( body,p) |LambdaOpt'(_,_,body)->makeListBoundByParam( body,p) |_->raise X_this_should_not_happen) listLambda)))) listOfLambdaListByParam) in
-                                  let list_of_bounds_that_raise_suspicious= (List.map (fun (p,listOfMajor)-> (p,(List.filter (fun num-> num=0 ) listOfMajor))) list_of_bounds_by_param) in
+                                  (*let list_of_bounds_by_param =(List.map (fun (p,listLambda)->(p,(List.flatten (List.map (fun lambda->match lambda with |LambdaSimple'(_,body)-> makeListBoundByParam( body,p) |LambdaOpt'(_,_,body)->makeListBoundByParam( body,p) |_->raise X_this_should_not_happen) listLambda)))) listOfLambdaListByParam) in*)
+                                  (*let list_of_bounds_that_raise_suspicious= (List.map (fun (p,listOfMajor)-> (p,(List.filter (fun num-> num=0 ) listOfMajor))) list_of_bounds_by_param) in*)
                                   let need_to_box_by_getters_and_setters=  (List.map  (fun (p,answer)->if(answer=true) then p else "")   exist_setter_and_getter_Each_from_another_clousere_by_param) in
-                                  let need_to_box_by_bounds=(List.map (fun (p,listInt)-> if((List.length listInt) > 1) then p else "" ) list_of_bounds_that_raise_suspicious) in
-                                  let intersection_need_to_box_index_save = (make_intersection (need_to_box_by_bounds,need_to_box_by_getters_and_setters)) in
-                                  let intersection_need_to_box_unIndex=(List.filter (fun s-> not(String.equal "" s)) intersection_need_to_box_index_save) in
+
+                                  (*let need_to_box_by_bounds=(List.map (fun (p,listInt)-> if((List.length listInt) > 1) then p else "" ) list_of_bounds_that_raise_suspicious) in*)
+                                  let union_need_to_box_index_save = (make_union ((*need_to_box_by_bounds*)need_to_box_by_same_lambda,need_to_box_by_getters_and_setters)) in
+                                  let union_need_to_box_unIndex=(List.filter (fun s-> not(String.equal "" s)) union_need_to_box_index_save) in
                                   let list_of_varParam_by_param=(List.map (fun p-> (p,makeListVarParamByParam(body,p)) ) params) in
-                                  let need_to_box_param_and_bound_index_save= make_list_PAB_need_to_box(list_of_varParam_by_param,list_of_bounds_by_param) in
-                                  let need_to_box_param_and_bound_unIndex=(List.filter (fun s-> not(String.equal "" s)) need_to_box_param_and_bound_index_save) in
+                                  let list_of_params_that_have_VarParam = (List.map (fun (p,pList)->if((List.length pList)!=0)then p else "") list_of_varParam_by_param) in
+
+                                  let need_to_box_param_and_set_index_save= make_intersection(list_of_params_that_have_VarParam,list_of_params_that_have_setters) in
+                                  let need_to_box_param_and_bound_unIndex=(List.filter (fun s-> not(String.equal "" s)) need_to_box_param_and_set_index_save) in
                                   let new_body_case_1=(update_GAS_list_of_param (body,need_to_box_param_and_bound_unIndex)) in
-                                  let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,intersection_need_to_box_unIndex)) in
-                                  let list_of_params_need_sets=make_list_of_params(intersection_need_to_box_index_save,need_to_box_param_and_bound_index_save) in
+                                  let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,union_need_to_box_unIndex)) in
+                                  let list_of_params_need_sets=make_list_of_params(union_need_to_box_index_save,need_to_box_param_and_set_index_save) in
                                   let list_set_box= (make_list_of_sets(list_of_params_need_sets,0)) in 
-                                  if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then make_return_value(expr',new_body_case_2,list_set_box) else expr'
+                                  if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length union_need_to_box_unIndex)!=0)) then make_return_value(expr',new_body_case_2,list_set_box) else LambdaSimple'(params,make_box body)
 
-
-
-
-    |LambdaOpt'(params1,opt,body)->let params=(List.concat [[opt];params1]) in
+    |LambdaOpt'(params1,opt,body)->let params=(List.concat [params1;[opt]]) in
                                     let listOfLambdaListByParam = (List.map (fun p-> (p,make_list_of_lambdas (body,p)) ) params ) in
                                     let list_Of_paris_Of_Getters_And_Setters_By_Param = (List.map   (fun (p,listByParam)-> (p,make_lambdas_list_of_getters (listByParam,p),(make_lambdas_list_of_setters(listByParam,p))))   listOfLambdaListByParam) in
+                                    let list_Of_paris_Of_Setters_By_Param = (List.map   (fun (p,listByParam)-> (p,(make_lambdas_list_of_setters(listByParam,p))))   listOfLambdaListByParam) in
+                                    let list_of_params_that_have_setters = (List.map (fun (p,setList)->if((List.length setList)!=0)then p else "") list_Of_paris_Of_Setters_By_Param) in
+                                    let list_of_same_lambdas_by_param=(List.map (fun (p,listLambdas)->(p,make_list_of_the_same_lambdas listLambdas)) listOfLambdaListByParam) in
+                                    let raise_suspicious_by_same_lambda=(List.map   (fun (p,listByParam)-> (p,(List.filter (fun l-> (hasGetter (l,p))&&(hasSetter (l,p))) listByParam)))   list_of_same_lambdas_by_param) in
+                                    let need_to_box_by_same_lambda=(List.map (fun (p,listExpr)-> if((List.length listExpr) > 0) then p else "" ) raise_suspicious_by_same_lambda) in
                                     let exist_setter_and_getter_Each_from_another_clousere_by_param = (List.map (fun (p,getters,setters)-> (p,exsitDiffrent(getters,setters))) list_Of_paris_Of_Getters_And_Setters_By_Param) in
-                                    let list_of_bounds_by_param =(List.map (fun (p,listLambda)->(p,(List.flatten (List.map (fun lambda->match lambda with |LambdaSimple'(_,body)-> makeListBoundByParam( body,p) |LambdaOpt'(_,_,body)->makeListBoundByParam( body,p) |_->raise X_this_should_not_happen) listLambda)))) listOfLambdaListByParam) in
-                                    let list_of_bounds_that_raise_suspicious= (List.map (fun (p,listOfMajor)-> (p,(List.filter (fun num-> num=0 ) listOfMajor))) list_of_bounds_by_param) in
+                                    (*let list_of_bounds_by_param =(List.map (fun (p,listLambda)->(p,(List.flatten (List.map (fun lambda->match lambda with |LambdaSimple'(_,body)-> makeListBoundByParam( body,p) |LambdaOpt'(_,_,body)->makeListBoundByParam( body,p) |_->raise X_this_should_not_happen) listLambda)))) listOfLambdaListByParam) in*)
+                                    (*let list_of_bounds_that_raise_suspicious= (List.map (fun (p,listOfMajor)-> (p,(List.filter (fun num-> num=0 ) listOfMajor))) list_of_bounds_by_param) in*)
                                     let need_to_box_by_getters_and_setters=  (List.map  (fun (p,answer)->if(answer=true) then p else "")   exist_setter_and_getter_Each_from_another_clousere_by_param) in
-                                    let need_to_box_by_bounds=(List.map (fun (p,listInt)-> if((List.length listInt) > 1) then p else "" ) list_of_bounds_that_raise_suspicious) in
-                                    let intersection_need_to_box_index_save = (make_intersection (need_to_box_by_bounds,need_to_box_by_getters_and_setters)) in
-                                    let intersection_need_to_box_unIndex=(List.filter (fun s-> not(String.equal "" s)) intersection_need_to_box_index_save) in
+
+                                    (*let need_to_box_by_bounds=(List.map (fun (p,listInt)-> if((List.length listInt) > 1) then p else "" ) list_of_bounds_that_raise_suspicious) in*)
+                                    let union_need_to_box_index_save = (make_union ((*need_to_box_by_bounds*)need_to_box_by_same_lambda,need_to_box_by_getters_and_setters)) in
+                                    let union_need_to_box_unIndex=(List.filter (fun s-> not(String.equal "" s)) union_need_to_box_index_save) in
                                     let list_of_varParam_by_param=(List.map (fun p-> (p,makeListVarParamByParam(body,p)) ) params) in
-                                    let need_to_box_param_and_bound_index_save= make_list_PAB_need_to_box(list_of_varParam_by_param,list_of_bounds_by_param) in
-                                    let need_to_box_param_and_bound_unIndex=(List.filter (fun s-> not(String.equal "" s)) need_to_box_param_and_bound_index_save) in
+                                    let list_of_params_that_have_VarParam = (List.map (fun (p,pList)->if((List.length pList)!=0)then p else "") list_of_varParam_by_param) in
+
+                                    let need_to_box_param_and_set_index_save= make_intersection(list_of_params_that_have_VarParam,list_of_params_that_have_setters) in
+                                    let need_to_box_param_and_bound_unIndex=(List.filter (fun s-> not(String.equal "" s)) need_to_box_param_and_set_index_save) in
                                     let new_body_case_1=(update_GAS_list_of_param (body,need_to_box_param_and_bound_unIndex)) in
-                                    let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,intersection_need_to_box_unIndex)) in
-                                    let list_of_params_need_sets=make_list_of_params(intersection_need_to_box_index_save,need_to_box_param_and_bound_index_save) in
+                                    let new_body_case_2=(update_GAS_list_of_param (new_body_case_1,union_need_to_box_unIndex)) in
+                                    let list_of_params_need_sets=make_list_of_params(union_need_to_box_index_save,need_to_box_param_and_set_index_save) in
                                     let list_set_box= (make_list_of_sets(list_of_params_need_sets,0)) in 
-                                    if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length intersection_need_to_box_unIndex)!=0)) then  make_return_value(expr',new_body_case_2,list_set_box)  else expr'
+                                    if(((List.length need_to_box_param_and_bound_unIndex)!=0) || ((List.length union_need_to_box_unIndex)!=0)) then make_return_value(expr',new_body_case_2,list_set_box) else LambdaOpt'(params1,opt,make_box body)
+
                                   
     |Seq'(exprList)-> Seq'(List.map (fun expr->make_box(expr)) exprList)
     |If'(_test,_then,_else)-> If'(make_box(_test),make_box(_then),make_box(_else))
@@ -1710,28 +1766,23 @@ match expr',new_body with
     |Or' (exprList)->  Or'(List.map (fun expr->make_box(expr)) exprList)
     |Applic'(expr,exprList)->  Applic'(make_box(expr),(List.map (fun expr->make_box(expr)) exprList))
     |ApplicTP' (expr,exprList)-> ApplicTP'(make_box(expr),(List.map (fun expr->make_box(expr)) exprList))
-    |_->expr';;
+    |_->expr'
+
+    and  make_return_value =
+    fun (expr',new_body,list_set_box) ->
+match expr',new_body with
+(*|LambdaSimple'(params,_),Seq'(exprlist)-> LambdaSimple'(params,Seq'(List.concat [list_set_box; exprlist]))
+|LambdaOpt'(params,opt,_),Seq'(exprlist)-> LambdaOpt'(params , opt , Seq'(List.concat [list_set_box; exprlist]))*)
+|LambdaSimple'(params,_),body-> LambdaSimple'(params,Seq'(List.concat [list_set_box; [make_box body]]))
+|LambdaOpt'(params,opt,_),body->LambdaOpt'(params,opt,Seq'(List.concat [list_set_box; [make_box body]]))
+|_->raise X_this_should_not_happen;;
   
 
-  
+ 
 
  (* struct Semantics *)
 
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(define foo1 (lambda (x) (list (lambda () x) (lambda (y) (set! x y)) )))"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (set! x (* x y))) "))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (lambda () x) (lambda () y) (lambda () (set! x y)) )"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (if x (lambda () (set! y x)) (lambda (z) (set! x z))) ) "))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (lambda () (set! x (+ x 1))) (lambda () y) )"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (lambda (op) (cond ((eq? op 'read) (lambda () x)) ((eq? op 'write) (lambda (val) (set! x val))))))"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x) (let ((y 1)) `(,(lambda () x) ,(set! x y)) )  )"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y) (cons x (lambda () (set! x y) ) ))"))));;
-    make_box(make_expr'(Tag_Parser.tag_parse_expression(Reader.read_sexpr ("(lambda (x y z) 
-                                                                              (list 
-                                                                                (lambda () 
-                                                                                  (list (lambda (x) (set! x z)) 
-                                                                                        (lambda () (set! x z))
-                                                                                         x))
-                                                                                (lambda (y) (set! x y))))"))));;
+
 
 
 exception X_syntax_error;;
@@ -1758,8 +1809,3 @@ let run_semantics expr =
   
 end;; (* struct Semantics *)
 
-Semantics.run_semantics (Tag_Parser.tag_parse_expression (Reader.read_sexpr "
-(define foo1 (lambda (x)
-                          (list (lambda () x)
-                                (lambda (y) 
-                                  (set! x y)))))"));;
