@@ -1929,15 +1929,15 @@ let make_tuple_for_const =
   | Void -> [(Void ,0 ,"MAKE_VOID" )] , 1
   | Sexpr(Nil)->[(Sexpr(Nil) ,1 ,"MAKE_NIL" )] , 2 
   | Sexpr(Bool(c))->if (c) then [(Sexpr(Bool(true)) ,4 ,"MAKE_BOOL(1)" )], 6 else [(Sexpr(Bool(false)) ,2 ,"MAKE_BOOL(0)" )], 4
-  | Sexpr(Number(Int(c)))-> [(Sexpr(Number(Int(c))) ,size , concate_string_list (["MAKE_LITERAL_INT(";string_of_int c ;")"],"") )] ,size+9
-  | Sexpr(Number(Float(c)))->[(Sexpr(Number(Float(c))) ,size , concate_string_list (["MAKE_LITERAL_FLOAT(";string_of_float c ;")"],"") )] ,size+9
+  | Sexpr(Number(Int(c)))-> [(Sexpr(Number(Int(c))) ,size , concate_string_list (["MAKE_LITERAL_INT(";string_of_int c ;")"],"") )] ,size+8+1
+  | Sexpr(Number(Float(c)))->[(Sexpr(Number(Float(c))) ,size , concate_string_list (["MAKE_LITERAL_FLOAT(";string_of_float c ;")"],"") )] ,size+8+1
   | Sexpr(Char(c))-> [(Sexpr(Char(c)) ,size ,concate_string_list (["MAKE_LITERAL_CHAR(";String.make 1 c ;")"],"") ) ],size+2
-  | Sexpr(String(c))-> [(Sexpr(String(c)) ,size ,concate_string_list (["MAKE_LITERAL_STRING(\"";c ;"\")"],"") )], size+ (String.length c)
+  | Sexpr(String(c))-> [(Sexpr(String(c)) ,size ,concate_string_list (["MAKE_LITERAL_STRING(\"";c ;"\")"],"") )], size+8+1+(String.length c)
   | Sexpr(Symbol(c))-> let index =(find_in_const_table (table,Sexpr(String(c)))) in if (index=(-1)) then  ([(Sexpr(String(c)),size,concate_string_list (["MAKE_LITERAL_STRING(\"";c ;"\")"],""));
-                                                                                                            (Sexpr(Symbol(c)), size+(String.length c)+9,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int size ;")"],""))]
-                                                                                                          ,size+(String.length c) +18) 
-                                                                                                        else [(Sexpr(Symbol(c)),size,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int index ;")"],""))],size+9
-  | Sexpr(Pair(car,cdr))->  [(Sexpr(Pair(car,cdr)),size ,concate_string_list (["MAKE_LITERAL(consts+";string_of_int (find_in_const_table (table,Sexpr(car))) ;",consts+";string_of_int (find_in_const_table (table,Sexpr(cdr)));")"],"") )], size+17
+                                                                                                            (Sexpr(Symbol(c)), size+(String.length c)+8+1,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int size ;")"],""))]
+                                                                                                          ,size+(String.length c) +1+8+1+8) 
+                                                                                                        else [(Sexpr(Symbol(c)),size,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int index ;")"],""))],size+8+1
+  | Sexpr(Pair(car,cdr))->  [(Sexpr(Pair(car,cdr)),size ,concate_string_list (["MAKE_LITERAL(consts+";string_of_int (find_in_const_table (table,Sexpr(car))) ;",consts+";string_of_int (find_in_const_table (table,Sexpr(cdr)));")"],"") )], size+1+8+8
   | Sexpr(Vector(sexprList))->[],0;;
 
 
