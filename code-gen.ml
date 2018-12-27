@@ -1204,6 +1204,8 @@ end;; (* struct Reader *)
        |Pair (Symbol "let", Pair (Pair (_arg, _args),_body))-> let vars = build_list_vars (Pair(_arg,_args)) in
                                                                let values= build_list_values (Pair(_arg,_args)) in
                                                                 Pair (Pair(Symbol "lambda", Pair(vars,_body)),values)
+      |Pair (Symbol "let", Pair (Symbol(var1),Pair(val1,_body)))-> Pair (Pair(Symbol "lambda", Pair(Symbol(var1),_body)),val1)
+
        |_-> raise PC.X_no_match
  
        and make_let =
@@ -1849,7 +1851,8 @@ end;; (* struct Reader *)
 
 
 #use "semantic-analyser.ml";;
- 
+
+
 
 
 let rec make_const_list =
@@ -1892,7 +1895,7 @@ let rec make_topologic =
   | Sexpr(String(c))->[Sexpr(String(c))]
   | Sexpr(Symbol(c))-> [Sexpr(Symbol(c))]
   | Sexpr(Pair(car,cdr))->  (List.concat [make_topologic (Sexpr(car)); make_topologic (Sexpr(cdr)); [Sexpr(Pair(car,cdr))]])
-  | Sexpr(Vector(sexprList))->List.flatten (List.map (fun sexpr-> (make_topologic (Sexpr(sexpr))) ) sexprList);;
+  | Sexpr(Vector(sexprList))->(List.concat [(List.flatten (List.map (fun sexpr-> (make_topologic (Sexpr(sexpr))) ) sexprList));[Sexpr(Vector(sexprList))]]);;
  
 
 
@@ -1920,7 +1923,12 @@ let rec find_in_const_table=
   |[]-> -1
   |car::cdr-> let index= (check_if_equal (car,c)) in if (index = -1) then find_in_const_table (cdr,c) else index;;
 
-
+let make_string_for_vector =
+  fun (sexprList,table)->
+  let middle_string_list = (List.map (fun sexpr-> (concate_string_list (["consts+"; (string_of_int (find_in_const_table (table,Sexpr(sexpr)))) ; "," ],"") )) sexprList) in
+  let concate_string_list_1= (concate_string_list (middle_string_list, "")) in
+   let fixed_string =(String.sub concate_string_list_1 (0) (String.length concate_string_list_1 -1)) in
+    concate_string_list (["MAKE_LITERAL_VECTOR(";  fixed_string; ")"],"")
 
 
 let make_tuple_for_const =
@@ -1937,8 +1945,9 @@ let make_tuple_for_const =
                                                                                                             (Sexpr(Symbol(c)), size+(String.length c)+8+1,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int size ;")"],""))]
                                                                                                           ,size+(String.length c) +1+8+1+8) 
                                                                                                         else [(Sexpr(Symbol(c)),size,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int index ;")"],""))],size+8+1
-  | Sexpr(Pair(car,cdr))->  [(Sexpr(Pair(car,cdr)),size ,concate_string_list (["MAKE_LITERAL(consts+";string_of_int (find_in_const_table (table,Sexpr(car))) ;",consts+";string_of_int (find_in_const_table (table,Sexpr(cdr)));")"],"") )], size+1+8+8
-  | Sexpr(Vector(sexprList))->[],0;;
+  | Sexpr(Pair(car,cdr))->  [(Sexpr(Pair(car,cdr)),size ,concate_string_list (["MAKE_LITERAL_PAIR(consts+";string_of_int (find_in_const_table (table,Sexpr(car))) ;" ,consts+";string_of_int (find_in_const_table (table,Sexpr(cdr)));")"],"") )], size+1+8+8
+  | Sexpr(Vector(sexprList))->let string_for_vector= (make_string_for_vector (sexprList,table)) in
+                                              ([(Sexpr(Vector(sexprList)),size,   string_for_vector )],(List.length sexprList)*8+8+1);;
 
 
 let rec make_const_tbl=
@@ -1947,24 +1956,163 @@ let rec make_const_tbl=
   |[]->curr
   |car::cdr -> let (listT,s)=make_tuple_for_const (car,curr,size_in_byte) in  make_const_tbl (cdr,List.concat [curr;listT ] ,s);;
 
-  let final_const_tbl=
-    fun expr'->
-    make_const_tbl((sort_topologic(remove_duplicates(make_const_list expr'))),[],0);;
+ 
+
+    
+
+let rec make_fvar_table =
+  fun (expr',currTable)->
+match expr' with
+| Var'(VarFree(c))->List.concat [currTable;[(c, 0)]]
+| Box' (VarFree(c))->List.concat [currTable;[(c, 0)]]
+| BoxGet'(VarFree(c))-> List.concat [currTable;[(c, 0)]]
+| BoxSet' (VarFree(c),expr) -> make_fvar_table( expr, (List.concat [currTable;[(c, 0)]]))
+| BoxSet' (_,expr)-> make_fvar_table(expr,currTable)
+| If' (_test,_then,_else)-> let testTable=make_fvar_table(_test,currTable) in
+                              let thenTable= make_fvar_table(_then,testTable) in
+                                make_fvar_table(_else,thenTable) 
+| Seq'(exprList)-> make_fvar_table_for_expr_list (exprList,currTable)
+| Set' (expr1,expr2)-> let expr1Table = make_fvar_table(expr1,currTable) in
+                          make_fvar_table(expr2,expr1Table)
+| Def'(expr1,expr2)->let expr1Table=make_fvar_table(expr1,currTable) in
+                      make_fvar_table(expr2,expr1Table)
+| Or'(exprList)-> make_fvar_table_for_expr_list (exprList,currTable)
+| LambdaSimple'(_,body)->make_fvar_table (body,currTable)
+| LambdaOpt'(_,_,body)->make_fvar_table (body,currTable)
+| Applic'(expr,exprList)-> let exprTable= make_fvar_table(expr,currTable) in
+                              make_fvar_table_for_expr_list(exprList,exprTable)
+| ApplicTP'(expr,exprList)->let exprTable= make_fvar_table(expr,currTable) in
+                              make_fvar_table_for_expr_list(exprList,exprTable)
+|_->currTable
+
+and make_fvar_table_for_expr_list = 
+fun (exprList,currTable)->
+match exprList with
+|[]-> currTable
+|car::cdr->let carTable= make_fvar_table (car,currTable) in make_fvar_table_for_expr_list(cdr,carTable);;
 
 
-    sort_topologic(remove_duplicates(make_const_list(Semantics.run_semantics(Tag_Parser.tag_parse_expression(Reader.read_sexpr "(list \"ab\" '(1 2) 'c 'ab)")))));;
+let rec remove_duplicates_fvars=
+  fun table->
+  match table with
+  |[]->[]
+  |car::cdr-> (List.concat [[car];(remove_duplicates_fvars (List.filter (fun (name,index)-> let (nameCar,indexCar)=car in (not(String.equal name nameCar))) cdr))]);;
 
-    final_const_tbl (Semantics.run_semantics(Tag_Parser.tag_parse_expression(Reader.read_sexpr "(list \"ab\" '(1 2) 'c 'ab)")));;
+
+let rec fill_index=
+  fun (table,newTable,index)->
+  match table with
+  |[]->newTable
+  |(nameCar,_)::cdr-> fill_index(cdr,(List.concat [newTable;[(nameCar,index)]]),index+1);;
+
+
+  let rec build_fvars_table=
+    fun (exprList,currTable)->
+    match exprList with
+    |[]-> currTable
+    |car::cdr->let carTable= make_fvar_table (car,currTable) in make_fvar_table_for_expr_list(cdr,carTable);;
+
+    let rec addressInConstTable =
+      fun (constTable,const)->
+      match constTable with
+      | []->""
+      | (carConst,(offset,_))::cdr-> if (const_eq (carConst,const)) then (concate_string_list (["consts+";string_of_int offset],"")) else  addressInConstTable(cdr,const);;
+
+    let rec labelInFVarTable =
+      fun (fvarTable,fvar)->
+      match fvarTable with
+      | []->""
+      | (carName,index)::cdr-> if (String.equal carName fvar) then (concate_string_list (["fvar_tbl+";string_of_int index;"*WORD_BYTES"],"")) else  labelInFVarTable(cdr,fvar);;
+
+    let rec make_generate=
+      fun (expr',currGen,constTable,fvarTable)->
+      match expr' with
+      | Const'(c)-> concate_string_list ([currGen; "mov rax, ";addressInConstTable(constTable,c);"\n"],"")
+      | Var'(VarFree(c))->concate_string_list ([currGen; "mov rax, qword [";labelInFVarTable(fvarTable,c);"]\n"],"")
+      | Var'(VarBound(c,mjr,mnr))->concate_string_list ([currGen; 
+                                                        "mov rax, qword [rbp+8*2]\n";
+                                                        "mov rax, qword [rax+8*";string_of_int mjr ;"]\n";
+                                                        "mov rax, qword [rax+8*";string_of_int mnr ;"]\n"],"")
+      | Var'(VarParam(c,mnr))-> concate_string_list ([currGen; "mov rax, qword [rbp+8*(4+";string_of_int mnr ;")]\n"],"")
+
+
+
+      | BoxGet'(v)->let varGetGenCodeExpand= make_generate(Var'(v),currGen,constTable,fvarTable) in
+                      concate_string_list ([varGetGenCodeExpand;
+                                            "mov rax, qword [rax]\n"],"")
+ 
+      | BoxSet' (v,expr) -> let genCodeExpr_expandCurrGen= make_generate (expr,currGen,constTable,fvarTable) in
+                            concate_string_list ([genCodeExpr_expandCurrGen;
+                                                  "push rax\n";
+                                                  make_generate(Var'(v),"",constTable,fvarTable);
+                                                  "pop qword [rax]\n";
+                                                  "mov rax, sob_void\n"],"")
+      | If' (_test,_then,_else)-> let testGenCode_expand= concate_string_list([make_generate(_test,currGen,constTable,fvarTable);
+                                                                              "cmp rax, sob_false\n";
+                                                                              "je %%Lelse\n"],"") in   
+                                  let thenGenCode_expand= concate_string_list([make_generate(_then,testGenCode_expand,constTable,fvarTable);
+                                                                              "jmp %%Lexit\n";
+                                                                              "%%Lelse:"],"") in 
+                                  let elseGenCode_expand= concate_string_list([make_generate(_else,thenGenCode_expand,constTable,fvarTable);
+                                                                              "%%Lexit:\n"],"") in 
+                                  elseGenCode_expand
+      | Seq'(exprList)-> let stringGenlist= (List.map (fun expr-> make_generate(expr,"",constTable,fvarTable)) exprList) in
+                          concate_string_list ((List.concat [[currGen];stringGenlist]),"")
+      | Set' (Var'(VarParam(_,mnr)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable) in
+                                               concate_string_list ([genCodeExpr2_expandCurrGen; 
+                                                                    "mov qword [rbp+8*(4+";string_of_int mnr ;")], rax\n";
+                                                                    "mov rax, sob_void\n"],"")
+      | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable) in 
+                                                    concate_string_list ([genCodeExpr2_expandCurrGen; 
+                                                                          "mov rbx, qword [rbp+8*2]]\n";
+                                                                          "mov rbx, qword [rbx+8*";string_of_int mjr ;"]\n";
+                                                                          "mov qword [rbx+8*";string_of_int mnr ;"], rax\n";
+                                                                          "mov rax, sob_void\n"],"")
+      | Set' (Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable) in
+                                    concate_string_list ([genCodeExpr2_expandCurrGen; 
+                                    "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
+                                    "mov rax, sob_void\n"],"")
+
+
+      | Or'(exprList)-> let subListWithoutLast=(List.rev (List.tl (List.rev (exprList) ))) in
+                        let lastExpr=(List.nth exprList ((List.length exprList)-1)) in
+                        let stringGenlist= (List.map (fun expr-> concate_string_list ([make_generate(expr,"",constTable,fvarTable);
+                                                                                      "cmp rax, sob false\n";
+                                                                                      "jne %%Lexit"],"")) subListWithoutLast) in
+                        let final_string_gen_list=(List.concat [stringGenlist; [(concate_string_list ( [make_generate(lastExpr,"",constTable,fvarTable);
+                                                                                                      "%%Lexit:\n"],""))]]) in
+                        concate_string_list ((List.concat [[currGen];final_string_gen_list]),"")
+      |_->currGen
+      (*| Def'(expr1,expcr2)-> (*~~~~~~~~~~~NEED TO IMPLEMENT~~~~~~~~~~~~~~~~~~~~~~~~*)
+      | Box' (v)-> ;                               
+      | LambdaSimple'(params,body)->
+      | LambdaOpt'(params,opt,body)->
+      | Applic'(expr,exprList)-> 
+      | ApplicTP'(expr,exprList)->*);;
+      
+
+      
 
 module type CODE_GEN = sig
-  val make_consts_tbl : expr' list -> (constant * ('a * string)) list
-  val make_fvars_tbl : expr' list -> (string * 'a) list
-  val generate : (constant * ('a * string)) list -> (string * 'a) list -> expr' -> string
+  val make_consts_tbl : expr' list -> (constant * ( int * string)) list
+  val make_fvars_tbl : expr' list -> (string * int) list
+  val generate : (constant * (int * string)) list -> (string * int) list -> expr' -> string
 end;;
 
 module Code_Gen : CODE_GEN = struct
-  let make_consts_tbl asts = raise X_not_yet_implemented;;
-  let make_fvars_tbl asts = raise X_not_yet_implemented;;
-  let generate consts fvars e = raise X_not_yet_implemented;;
+
+
+  let make_consts_tbl asts =  let tables= (List.flatten(List.map make_const_list asts)) in 
+                                let final_table= make_const_tbl( (sort_topologic(remove_duplicates (tables))) ,[] , 0 ) in
+                            (List.map (fun (a,b,c)->(a,(b,c))) final_table) ;;
+  let make_fvars_tbl asts = fill_index((remove_duplicates_fvars(build_fvars_table (asts,[]))),[],0);;
+
+  let generate consts fvars e = make_generate (e,"",consts,fvars);;
 end;;
+
+
+
+
+
+
 

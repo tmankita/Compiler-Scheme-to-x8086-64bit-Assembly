@@ -15,6 +15,8 @@
 
 (define list (lambda x x))
 
+
+
 (define list? 
   (let ((null? null?) (pair? pair?) (cdr cdr))
     (lambda (x)

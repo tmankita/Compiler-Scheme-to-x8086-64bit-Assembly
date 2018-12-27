@@ -144,6 +144,17 @@
 	pop rcx
 %endmacro
 
+%macro
+MAKE_LITERAL_VECTOR 0-*
+	db T_VECTOR
+	dq %0
+%rep %0
+	dq %1
+%rotate 1
+%endrep
+%endmacro
+
+
 ;;; Creates a SOB with tag %2 
 ;;; from two pointers %3 and %4
 ;;; Stores result in register %1
@@ -168,6 +179,27 @@
 
 %define MAKE_CLOSURE(r, env, body) \
         MAKE_TWO_WORDS r, T_CLOSURE, env, body
+%macro
+MAKE_LITERAL 2
+; Make a literal of type %1
+; followed by the definition %2
+	db %1 
+	%2
+%endmacro
+%define MAKE_LITERAL_INT (val) MAKE_LITERAL T_INTEGER, dq val
+%define MAKE_LITERAL_FLOAT (val) MAKE_LITERAL T_FLOAT, dq val
+%define MAKE_LITERAL_SYMBOL (symbol) MAKE_LITERAL T_SYMBOL, dq symbol
+%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
+%define MAKE_NIL db T_NIL
+%define MAKE_VOID db T_VOID
+%define MAKE_BOOL (val) MAKE_LITERAL T_BOOL, db val
+%macro MAKE_LITERAL_STRING 1
+	db T_STRING
+	dq (%%end_str- %%str)
+%%str: 
+	db %1
+%%end_str:
+%endmacro
 
 	
 extern exit, printf, malloc

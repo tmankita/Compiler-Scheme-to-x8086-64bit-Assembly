@@ -97,7 +97,9 @@ end
     let _boolean_ = make_spaced (PC.caten _hashSymbol_ (PC.one_of_ci "tf"));;
   
   
-    let nt_symbol = (make_spaced_from_right ((PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:")))) ;;
+    let nt_symbol_for_integer = (make_spaced_from_right ((PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:")))) ;;
+    let nt_symbol = (make_spaced ((PC.plus (PC.one_of_ci "abcdefghijklmnopqrstuvwxyz0123456789!?$+*/-=^<>_:")))) ;;
+
   
     let correct_boolean e = 
       let ( symbol , be) = e in         
@@ -118,7 +120,7 @@ end
       
         let nt_decimal = PC.caten make_sign (PC.plus (PC.one_of "0123456789"));;
       
-        let nt_integer= make_spaced(PC.not_followed_by ( (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e))) (nt_symbol));;
+        let nt_integer= make_spaced(PC.not_followed_by ( (PC.caten (PC.disj (nt_HexInteger) (PC.pack nt_decimal (fun ((a,b)) -> '#' ,(('d',a), b)  ))) (PC.maybe nt_e))) (nt_symbol_for_integer));;
       
       let build_integer opt numberList = int_of_string (String.concat  "" [opt ; list_to_string numberList]) ;;
       

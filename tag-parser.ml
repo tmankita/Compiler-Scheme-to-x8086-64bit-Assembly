@@ -376,6 +376,7 @@ let reserved_word_list =
       |Pair (Symbol "let", Pair (Pair (_arg, _args),_body))-> let vars = build_list_vars (Pair(_arg,_args)) in
                                                               let values= build_list_values (Pair(_arg,_args)) in
                                                                Pair (Pair(Symbol "lambda", Pair(vars,_body)),values)
+      |Pair (Symbol "let", Pair (Symbol(var),Pair(val1,_body)))-> Pair (Pair(Symbol "lambda", Pair(Symbol(var),_body)),val1)
       |_-> raise PC.X_no_match
 
       and make_let =
