@@ -2222,8 +2222,6 @@ code_fragment:
     ;; This is where we emulate the missing (define ...) expressions
     ;; for all the primitive procedures.
 " ^ (String.concat "\n" (List.map make_primitive_closure primitive_names_to_labels)) ^ "
-  leave
-  ret
  
 ";;
 
@@ -2248,10 +2246,12 @@ try
                         (List.map
                            (fun ast -> (generate ast) ^ "\n    call write_sob_if_not_void")
                            asts) in
+  let final_code_fragment=concate_string_list ([code_fragment;"\nleave\n";
+                                                                "\nret\n"],"") in
   let provided_primitives = file_to_string "prims.s" in
                    
   print_string ((make_prologue consts_tbl fvars_tbl)  ^
-                  code_fragment ^"\n"^
+                final_code_fragment ^"\n"^
                     provided_primitives ^ "\n" ^ epilogue)
 
 with Invalid_argument(x) -> raise X_missing_input_file;;

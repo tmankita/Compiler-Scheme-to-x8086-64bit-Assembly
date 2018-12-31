@@ -2020,7 +2020,7 @@ let rec fill_index=
       fun (constTable,const)->
       match constTable with
       | []->""
-      | (carConst,(offset,_))::cdr-> if (const_eq (carConst,const)) then (concate_string_list (["consts+";string_of_int offset],"")) else  addressInConstTable(cdr,const);;
+      | (carConst,(offset,_))::cdr-> if (const_eq (carConst,const)) then (concate_string_list (["consts+";string_of_int offset;],"")) else  addressInConstTable(cdr,const);;
 
     let rec labelInFVarTable =
       fun (fvarTable,fvar)->
@@ -2063,13 +2063,13 @@ let rec fill_index=
                                                   "push rax\n";
                                                   make_generate(Var'(v),"",constTable,fvarTable,envSize);
                                                   "pop qword [rax]\n";
-                                                  "mov rax, qword [consts+0]\n"],"")
+                                                  "mov rax, qword consts+0\n"],"")
       | Def'(Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                           concate_string_list ([genCodeExpr2_expandCurrGen; 
                                           "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
-                                          "mov rax, qword [consts+0]\n"],"")
+                                          "mov rax, qword consts+0\n"],"")
       | If' (_test,_then,_else)-> let index=next_val() in let testGenCode_expand= concate_string_list([make_generate(_test,currGen,constTable,fvarTable,envSize);
-                                                                              "cmp rax, qword [consts+2]\n";
+                                                                              "cmp rax, consts+2\n";
                                                                               "je Lelse";string_of_int index;"\n"],"") in   
                                   let thenGenCode_expand= concate_string_list([make_generate(_then,testGenCode_expand,constTable,fvarTable,envSize);
                                                                               "jmp Lexit";string_of_int index ;"\n";
@@ -2082,24 +2082,24 @@ let rec fill_index=
       | Set' (Var'(VarParam(_,mnr)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                                concate_string_list ([genCodeExpr2_expandCurrGen; 
                                                                     "mov qword [rbp+8*(4+";string_of_int mnr ;")], rax\n";
-                                                                    "mov rax, qword [consts+0]\n"],"")
+                                                                    "mov rax, qword consts+0\n"],"")
       | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in 
                                                     concate_string_list ([genCodeExpr2_expandCurrGen; 
                                                                           "mov rbx, qword [rbp+8*2]]\n";
                                                                           "mov rbx, qword [rbx+8*";string_of_int mjr ;"]\n";
                                                                           "mov qword [rbx+8*";string_of_int mnr ;"], rax\n";
-                                                                          "mov rax, qword [consts+0]\n"],"")
+                                                                          "mov rax, qword consts+0\n"],"")
       | Set' (Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                     concate_string_list ([genCodeExpr2_expandCurrGen; 
                                     "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
-                                    "mov rax, qword [consts+0]\n"],"")
+                                    "mov rax, qword consts+0\n"],"")
 
 
       | Or'(exprList)-> let subListWithoutLast=(List.rev (List.tl (List.rev (exprList) ))) in
                         let lastExpr=(List.nth exprList ((List.length exprList)-1)) in
                         let index=next_val() in
                         let stringGenlist= (List.map (fun expr-> concate_string_list ([make_generate(expr,"",constTable,fvarTable,envSize);
-                                                                                      "cmp rax, qword [consts+2]\n";
+                                                                                      "cmp rax, qword consts+2\n";
                                                                                       "jne Lexit";string_of_int (index);"\n"],"")) subListWithoutLast) in
                         let final_string_gen_list=(List.concat [stringGenlist; [(concate_string_list ( [make_generate(lastExpr,"",constTable,fvarTable,envSize);
                                                                                                       "Lexit";string_of_int index;":\n"],""))]]) in
@@ -2127,28 +2127,32 @@ let rec fill_index=
                                       let sizeParams= (List.length params) in
                                         let bodyGenCode= make_generate(body,"",constTable,fvarTable,extEnvSize) in
                                          let index=next_val() in
-                                          let extEnvInitial= if(sizeParams>0) then concate_string_list([currGen;
+                                          let extEnvInitial= if(sizeParams>0) then concate_string_list([currGen;"lambda:\n";
                                                                                   "MALLOC rax, ";string_of_int sizeParams;"*WORD_SIZE\n";
                                                                                   "lea rax, [rax+";string_of_int (sizeParams-1);"*WORD_SIZE";"]\n";
-                                                                                  "mov qword rcx, ";string_of_int (sizeParams-1);"\n";
-                                                                                  "lea r10, [rbp + 4*8 + rcx*WORD_SIZE]\n";
+                                                                                  "mov qword rcx, ";string_of_int (sizeParams);"\n";
+                                                                                  "lea r10, [rbp + 3*8 + rcx*WORD_SIZE]\n";
                                                                                   "mov r9, qword [r10]\n";
                                                                                   "mov qword [rax],r9\n";
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
+                                                                                  "dec rcx\n";
+                                                                                  "cmp rcx, 0x0\n";
+                                                                                  "je endInsert";string_of_int (index);"\n";
                                                                                   "InsertParam";string_of_int (index);":\n";
                                                                                   "dec rcx\n";
                                                                                   "lea r10, [rbp + 4*8 + rcx*WORD_SIZE]\n";
                                                                                   "mov r9, qword [r10]\n";
                                                                                   "mov qword [rax],r9\n";
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
-                                                                                  "cmp rcx, 0\n";
+                                                                                  "cmp rcx, 0x0\n";
                                                                                   "jne InsertParam";string_of_int index;"\n";
+                                                                                  "endInsert";string_of_int (index);":\n";
                                                                                   "lea rax, [rax+WORD_SIZE]\n";
                                                                                   "push rax\n";
                                                                                   "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
                                                                                   "pop qword [rax]\n";
-                                                                                  ],"") else concate_string_list(["MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";],"")  in
-                                            let extEnv= if (envSize!=0) then concate_string_list ([
+                                                                                  ],"") else concate_string_list([currGen;"MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";],"")  in
+                                            let extEnv= if (envSize!=0) then concate_string_list ([extEnvInitial;
                                                                             ";r8 going to be new addres for start of extEnv\n"; 
                                                                             ";rsi going to be old envSize\n";
                                                                             ";rdi going to be addres of env[i]\n";
@@ -2164,7 +2168,7 @@ let rec fill_index=
                                                                             "mov qword [r9], rdi\n";
                                                                             "inc rcx\n";
                                                                             "cmp rcx, rsi\n";
-                                                                            "jne LoopEnv";string_of_int index;"\n";
+                                                                            "jle LoopEnv";string_of_int index;"\n";
                                                                             "End_loop";string_of_int index;":\n";
                                                                             "mov qword rax, r8\n";
                                                                             ],"") else extEnvInitial in
