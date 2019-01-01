@@ -2044,12 +2044,12 @@ let rec fill_index=
 
 
       | Box' (VarFree(c))-> concate_string_list ([currGen;
-                                                 "lea rax, qword [";labelInFVarTable(fvarTable,c);"]\n";
+                                                 "lea rax, [";labelInFVarTable(fvarTable,c);"]\n";
                                                  "push rax\n";
                                                  "MALLOC rax, WORD_SIZE\n";
                                                  "pop qword [rax]\n"],"") 
       | Box' (VarParam(c,mnr))->   concate_string_list ([currGen;
-                                                        "lea rax, qword [rbp+8*(4+";string_of_int mnr ;")]";
+                                                        "lea rax, [rbp+8*(4+";string_of_int mnr ;")]\n";
                                                         "push rax\n";
                                                         "MALLOC rax, WORD_SIZE\n";
                                                         "pop qword [rax]\n"],"")                   
@@ -2063,11 +2063,11 @@ let rec fill_index=
                                                   "push rax\n";
                                                   make_generate(Var'(v),"",constTable,fvarTable,envSize);
                                                   "pop qword [rax]\n";
-                                                  "mov rax, qword consts+0\n"],"")
+                                                  "mov rax, consts+0\n"],"")
       | Def'(Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                           concate_string_list ([genCodeExpr2_expandCurrGen; 
                                           "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
-                                          "mov rax, qword consts+0\n"],"")
+                                          "mov rax, consts+0\n"],"")
       | If' (_test,_then,_else)-> let index=next_val() in let testGenCode_expand= concate_string_list([make_generate(_test,currGen,constTable,fvarTable,envSize);
                                                                               "cmp rax, consts+2\n";
                                                                               "je Lelse";string_of_int index;"\n"],"") in   
@@ -2082,17 +2082,17 @@ let rec fill_index=
       | Set' (Var'(VarParam(_,mnr)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                                concate_string_list ([genCodeExpr2_expandCurrGen; 
                                                                     "mov qword [rbp+8*(4+";string_of_int mnr ;")], rax\n";
-                                                                    "mov rax, qword consts+0\n"],"")
+                                                                    "mov rax, consts+0\n"],"")
       | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in 
                                                     concate_string_list ([genCodeExpr2_expandCurrGen; 
                                                                           "mov rbx, qword [rbp+8*2]]\n";
                                                                           "mov rbx, qword [rbx+8*";string_of_int mjr ;"]\n";
                                                                           "mov qword [rbx+8*";string_of_int mnr ;"], rax\n";
-                                                                          "mov rax, qword consts+0\n"],"")
+                                                                          "mov rax, consts+0\n"],"")
       | Set' (Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
                                     concate_string_list ([genCodeExpr2_expandCurrGen; 
                                     "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
-                                    "mov rax, qword consts+0\n"],"")
+                                    "mov rax, consts+0\n"],"")
 
 
       | Or'(exprList)-> let subListWithoutLast=(List.rev (List.tl (List.rev (exprList) ))) in
@@ -2104,7 +2104,8 @@ let rec fill_index=
                         let final_string_gen_list=(List.concat [stringGenlist; [(concate_string_list ( [make_generate(lastExpr,"",constTable,fvarTable,envSize);
                                                                                                       "Lexit";string_of_int index;":\n"],""))]]) in
                         concate_string_list ((List.concat [[currGen];final_string_gen_list]),"")
-      | Applic'(proc,exprList)-> let argCode= List.fold_right (fun  expr' acc-> concate_string_list([acc; make_generate (expr',currGen,constTable,fvarTable,envSize);"push rax\n"],"")) exprList "" in
+      | Applic'(proc,exprList)->let pushMagic=concate_string_list(["push SOB_NIL_ADDRESS\n"],"")in 
+                                let argCode= List.fold_right (fun  expr' acc-> concate_string_list([acc; make_generate (expr',currGen,constTable,fvarTable,envSize);"push rax\n"],"")) exprList "" in
                                   let argNumber=concate_string_list (["push ";(string_of_int (List.length exprList));"\n" ],"") in
                                    let procCode= make_generate (proc,currGen,constTable,fvarTable,envSize) in
                                     (*need to add verify clouser maybe in assembly or maybe in ocaml*)
@@ -2113,6 +2114,7 @@ let rec fill_index=
                                                                       "CLOSURE_CODE r9, rax\n";
                                                                       "call r9\n"],"") in
                                     let applicCode=concate_string_list([currGen;
+                                                                        pushMagic;
                                                                         argCode;
                                                                         argNumber;
                                                                         procCode;
@@ -2120,17 +2122,32 @@ let rec fill_index=
                                                                         "add rsp, 8*1   ;pop env\n";
                                                                         "pop rbx        ;pop arg count\n";
                                                                         "shl rbx, 3     ;rbx = rbx*8\n";
-                                                                        "add rsp, rbx   ;pop args\n"],"") in
+                                                                        "add rsp, rbx   ;pop args\n";
+                                                                        "add rsp, 8*1   ;pop magic\n"],"") in
                                       applicCode
 
       | LambdaSimple'(params,body)->let extEnvSize=envSize+1 in
-                                      let sizeParams= (List.length params) in
                                         let bodyGenCode= make_generate(body,"",constTable,fvarTable,extEnvSize) in
                                          let index=next_val() in
-                                          let extEnvInitial= if(sizeParams>0) then concate_string_list([currGen;"lambda:\n";
-                                                                                  "MALLOC rax, ";string_of_int sizeParams;"*WORD_SIZE\n";
-                                                                                  "lea rax, [rax+";string_of_int (sizeParams-1);"*WORD_SIZE";"]\n";
-                                                                                  "mov qword rcx, ";string_of_int (sizeParams);"\n";
+                                          let checkDummyFrame= concate_string_list ([currGen;
+                                                                                      "mov rdi, qword [rsp+2*8]\n";
+                                                                                      "lea rsi, [consts+1]\n";
+                                                                                      "cmp rdi, rsi\n";
+                                                                                      "jne Lambda";string_of_int index;"\n";
+                                                                                      "MALLOC rax, 1*WORD_SIZE\n";
+                                                                                      "push rsi\n";
+                                                                                      "pop qword [rax]\n";
+                                                                                      "jmp Lcont";string_of_int index;"\n";
+                                                                                      "Lambda";string_of_int index;":\n";],"") in 
+                                          let extEnvInitial= concate_string_list([checkDummyFrame;
+                                                                                  "mov rdi,qword [rbp+8*3]\n";
+                                                                                  "mov rcx, rdi\n";
+                                                                                  "cmp rdi, 0x0\n";
+                                                                                  "je NoNeedCopy";string_of_int index;"\n";
+                                                                                  "lea rdi, [rdi*WORD_SIZE]\n";
+                                                                                  "MALLOC rax, rdi\n";
+                                                                                  "sub rdi, WORD_SIZE\n";
+                                                                                  "lea rax, [rax+rdi]\n";
                                                                                   "lea r10, [rbp + 3*8 + rcx*WORD_SIZE]\n";
                                                                                   "mov r9, qword [r10]\n";
                                                                                   "mov qword [rax],r9\n";
@@ -2151,13 +2168,21 @@ let rec fill_index=
                                                                                   "push rax\n";
                                                                                   "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
                                                                                   "pop qword [rax]\n";
-                                                                                  ],"") else concate_string_list([currGen;"MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";],"")  in
+                                                                                  "jmp NoMaloc";string_of_int index;"\n";
+                                                                                  "NoNeedCopy";string_of_int index;":\n"
+                                                                                  ],"") in
                                             let extEnv= if (envSize!=0) then concate_string_list ([extEnvInitial;
+                                                                            
                                                                             ";r8 going to be new addres for start of extEnv\n"; 
                                                                             ";rsi going to be old envSize\n";
                                                                             ";rdi going to be addres of env[i]\n";
                                                                             ";rcx going to be counter fo loop\n";
                                                                             ";r9 temp register\n";
+                                                                            "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
+                                                                            "lea r10, [consts+1]\n";
+                                                                            "push r10\n";
+                                                                            "pop qword [rax]\n";
+                                                                            "NoMaloc";string_of_int index;":\n";
                                                                             "mov r8, rax\n";
                                                                             "mov qword rsi, ";string_of_int envSize;"\n";
                                                                             "mov rax, qword [rbp+8*2]     ;rax is start of current lexEnv\n";
@@ -2171,7 +2196,9 @@ let rec fill_index=
                                                                             "jle LoopEnv";string_of_int index;"\n";
                                                                             "End_loop";string_of_int index;":\n";
                                                                             "mov qword rax, r8\n";
-                                                                            ],"") else extEnvInitial in
+                                                                            ],"") else concate_string_list([extEnvInitial;
+                                                                                                            "NoMaloc";string_of_int index;":\n";
+                                                                                                            ],"") in
                                                 let codeClosure= concate_string_list([extEnv;
                                                                                       "jmp Lcont";string_of_int index;"\n";
                                                                                       "Lcode";string_of_int index;":\n";
@@ -2181,12 +2208,133 @@ let rec fill_index=
                                                                                       "leave\n";
                                                                                       "ret\n";
                                                                                       "Lcont";string_of_int index;":\n";
-                                                                                      "MAKE_CLOSURE(rax,rax,Lcode";string_of_int index;")\n";],"") in
+                                                                                      "mov rdi,rax\n";
+                                                                                      "MAKE_CLOSURE(rax,rdi,Lcode";string_of_int index;")\n";],"") in
                                                   codeClosure
-        
+      | LambdaOpt'(params,opt,body)-> let extEnvSize=envSize+1 in
+                                        let bodyGenCode= make_generate(body,"",constTable,fvarTable,extEnvSize) in
+                                        let paramSize=(List.length params) in
+                                        let index=next_val() in
+                                        let optAvailable= not (String.equal opt "") in
+                                          let checkDummyFrame= concate_string_list ([currGen;
+                                                                                      "mov rdi, qword [rsp+2*8]\n";
+                                                                                      "lea rsi, [consts+1]\n";
+                                                                                      "cmp rdi, rsi\n";
+                                                                                      "jne Lambda";string_of_int index;"\n";
+                                                                                      "MALLOC rax, 1*WORD_SIZE\n";
+                                                                                      "push rsi\n";
+                                                                                      "pop qword [rax]\n";
+                                                                                      "jmp Lcont";string_of_int index;"\n";
+                                                                                      "Lambda";string_of_int index;":\n";],"") in 
+                                          let extEnvInitial= concate_string_list([checkDummyFrame;
+                                                                                  "mov rdi,qword [rbp+8*3]\n";
+                                                                                  "mov rcx, rdi\n";
+                                                                                  "cmp rdi, 0x0\n";
+                                                                                  "je NoNeedCopy";string_of_int index;"\n";
+                                                                                  "lea rdi, [rdi*WORD_SIZE]\n";
+                                                                                  "MALLOC rax, rdi\n";
+                                                                                  "sub rdi, WORD_SIZE\n";
+                                                                                  "lea rax, [rax+rdi]\n";
+                                                                                  "lea r10, [rbp + 3*8 + rcx*WORD_SIZE]\n";
+                                                                                  "mov r9, qword [r10]\n";
+                                                                                  "mov qword [rax],r9\n";
+                                                                                  "lea rax, [rax-WORD_SIZE]\n";
+                                                                                  "dec rcx\n";
+                                                                                  "cmp rcx, 0x0\n";
+                                                                                  "je endInsert";string_of_int (index);"\n";
+                                                                                  "InsertParam";string_of_int (index);":\n";
+                                                                                  "dec rcx\n";
+                                                                                  "lea r10, [rbp + 4*8 + rcx*WORD_SIZE]\n";
+                                                                                  "mov r9, qword [r10]\n";
+                                                                                  "mov qword [rax],r9\n";
+                                                                                  "lea rax, [rax-WORD_SIZE]\n";
+                                                                                  "cmp rcx, 0x0\n";
+                                                                                  "jne InsertParam";string_of_int index;"\n";
+                                                                                  "endInsert";string_of_int (index);":\n";
+                                                                                  "lea rax, [rax+WORD_SIZE]\n";
+                                                                                  "push rax\n";
+                                                                                  "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
+                                                                                  "pop qword [rax]\n";
+                                                                                  "jmp NoMaloc";string_of_int index;"\n";
+                                                                                  "NoNeedCopy";string_of_int index;":\n"
+                                                                                  ],"") in
+                                            let extEnv= if (envSize!=0) then concate_string_list ([extEnvInitial;
+                                                                            
+                                                                            ";r8 going to be new addres for start of extEnv\n"; 
+                                                                            ";rsi going to be old envSize\n";
+                                                                            ";rdi going to be addres of env[i]\n";
+                                                                            ";rcx going to be counter fo loop\n";
+                                                                            ";r9 temp register\n";
+                                                                            "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
+                                                                            "lea r10, [consts+1]\n";
+                                                                            "push r10\n";
+                                                                            "pop qword [rax]\n";
+                                                                            "NoMaloc";string_of_int index;":\n";
+                                                                            "mov r8, rax\n";
+                                                                            "mov qword rsi, ";string_of_int envSize;"\n";
+                                                                            "mov rax, qword [rbp+8*2]     ;rax is start of current lexEnv\n";
+                                                                            "mov qword rcx, 1\n";
+                                                                            "LoopEnv";string_of_int index;":\n";
+                                                                            "lea rdi, [rax+8*rcx -8]\n";
+                                                                            "lea r9, [r8+rcx*8]\n";
+                                                                            "mov qword [r9], rdi\n";
+                                                                            "inc rcx\n";
+                                                                            "cmp rcx, rsi\n";
+                                                                            "jle LoopEnv";string_of_int index;"\n";
+                                                                            "End_loop";string_of_int index;":\n";
+                                                                            "mov qword rax, r8\n";
+                                                                            ],"") else concate_string_list([extEnvInitial;
+                                                                                                            "NoMaloc";string_of_int index;":\n";
+                                                                                                            ],"") in
+                                                let codeClosure=  if optAvailable 
+                                                                  then concate_string_list([extEnv;
+                                                                                      "jmp Lcont";string_of_int index;"\n";
+                                                                                      "Lcode";string_of_int index;":\n";
+                                                                                      "mov qword rdi,";string_of_int paramSize;"  ;rdi hold paramSize\n";
+                                                                                      "mov rsi,qword [rsp+8*2]    ;rsi hold n\n";
+                                                                                      "sub rsi, rdi\n";
+                                                                                      "mov rcx, rsi               ;rcx hold the counterLoop= n - paramSize\n";
+                                                                                      "cmp rcx, 0x0\n";
+                                                                                      "je EndOpt";string_of_int index;"\n"
+                                                                                      "lea r10, [rsp+3*8+rdi*8]   ;r10 hold the address of the element that need to copy in the loop \n";
+                                                                                      "mov rsi, r10               ;rsi hold the address of the first element that need to copy \n";
+                                                                                      "MAKE_PAIR (rax, rsi, SOB_NIL_ADDRESS) \n";
+                                                                                      "dec rcx\n";
+                                                                                      "cmp rcx, 0x0\n";
+                                                                                      "je EndOpt";string_of_int index;"\n"
+                                                                                      "CopyOptParams";string_of_int index;":\n";
+                                                                                      "add r10, WORD_SIZE \n";
+                                                                                      "push qword [r10]\n";
+                                                                                      "pop qword r8\n";
+                                                                                      "mov r11, rax\n";
+                                                                                      "MAKE_PAIR (rax, r8, r11) \n";
+                                                                                      "dec rcx\n";
+                                                                                      "cmp rcx, 0x0\n";
+                                                                                      "jg CopyOptParams";string_of_int index;"\n";
+                                                                                      "push rax             ;rax hold the pointer to optParamLi\n";
+                                                                                      "pop qword [rsi]      ;override first opt params with optParamVector\n";
+                                                                                      "push rbp\n";
+                                                                                      "mov rbp, rsp\n";
+                                                                                      bodyGenCode;
+                                                                                      "leave\n";
+                                                                                      "ret\n";
+                                                                                      "Lcont";string_of_int index;":\n";
+                                                                                      "mov rdi,rax\n";
+                                                                                      "MAKE_CLOSURE(rax,rdi,Lcode";string_of_int index;")\n";],"")
+                                                                  else concate_string_list([extEnv;
+                                                                                      "jmp Lcont";string_of_int index;"\n";
+                                                                                      "Lcode";string_of_int index;":\n";
+                                                                                      "push rbp\n";
+                                                                                      "mov rbp, rsp\n";
+                                                                                      bodyGenCode;
+                                                                                      "leave\n";
+                                                                                      "ret\n";
+                                                                                      "Lcont";string_of_int index;":\n";
+                                                                                      "mov rdi,rax\n";
+                                                                                      "MAKE_CLOSURE(rax,rdi,Lcode";string_of_int index;")\n";],"") in
+                                                  codeClosure
       |_->currGen
       (* (*~~~~~~~~~~~NEED TO IMPLEMENT~~~~~~~~~~~~~~~~~~~~~~~~*)
-      | LambdaOpt'(params,opt,body)->
       | ApplicTP'(expr,exprList)->*)
       and makeSeqCode=
         fun (listExpr,constTable,fvarTable,envSize,index,curr)->
