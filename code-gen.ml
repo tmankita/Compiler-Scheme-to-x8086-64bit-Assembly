@@ -2294,16 +2294,20 @@ let rec fill_index=
                                                                                       "mov rsi,qword [rsp+8*2]    ;rsi hold n\n";
                                                                                       "sub rsi, rdi\n";
                                                                                       "mov rcx, rsi               ;rcx hold the counterLoop= n - paramSize\n";
+                                                                                      "lea r10, [rsp+3*8+rdi*8]\n" ;  
+                                                                                      "mov r9, r10                ;r9 hold the address of the first element that need to copy \n";
+                                                                                      "lea r11, [rcx*8 -8]\n";
+                                                                                      "add r10, r11             ;r10 hold the address of the element that need to copy in the loop \n";
+                                                                                      "mov rsi, qword [r10]       ;rsi hold the first element that need to copy \n";
+                                                                                      "mov rax, rsi\n";
                                                                                       "cmp rcx, 0x0\n";
-                                                                                      "je EndOpt";string_of_int index;"\n"
-                                                                                      "lea r10, [rsp+3*8+rdi*8]   ;r10 hold the address of the element that need to copy in the loop \n";
-                                                                                      "mov rsi, r10               ;rsi hold the address of the first element that need to copy \n";
+                                                                                      "je EndOpt";string_of_int index;"\n";
                                                                                       "MAKE_PAIR (rax, rsi, SOB_NIL_ADDRESS) \n";
                                                                                       "dec rcx\n";
                                                                                       "cmp rcx, 0x0\n";
-                                                                                      "je EndOpt";string_of_int index;"\n"
+                                                                                      "je EndOpt";string_of_int index;"\n";
                                                                                       "CopyOptParams";string_of_int index;":\n";
-                                                                                      "add r10, WORD_SIZE \n";
+                                                                                      "sub r10, WORD_SIZE \n";
                                                                                       "push qword [r10]\n";
                                                                                       "pop qword r8\n";
                                                                                       "mov r11, rax\n";
@@ -2311,8 +2315,9 @@ let rec fill_index=
                                                                                       "dec rcx\n";
                                                                                       "cmp rcx, 0x0\n";
                                                                                       "jg CopyOptParams";string_of_int index;"\n";
-                                                                                      "push rax             ;rax hold the pointer to optParamLi\n";
-                                                                                      "pop qword [rsi]      ;override first opt params with optParamVector\n";
+                                                                                      "EndOpt";string_of_int index;":\n";
+                                                                                      "push rax             ;rax hold the pointer to optParamList\n";
+                                                                                      "pop qword [r9]      ;override first opt params with optParamVector\n";
                                                                                       "push rbp\n";
                                                                                       "mov rbp, rsp\n";
                                                                                       bodyGenCode;
