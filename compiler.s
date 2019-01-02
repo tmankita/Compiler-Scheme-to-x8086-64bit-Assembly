@@ -35,7 +35,9 @@
 
 %define INT_VAL SKIP_TYPE_TAG
 
-%define CHAR_VAL SKIP_TYPE_TAG
+%macro CHAR_VAL 2
+       movzx %1, byte [%2+TYPE_SIZE]
+%endmacro 
 
 %define FLOAT_VAL SKIP_TYPE_TAG
 
@@ -246,7 +248,10 @@ write_sob_float:
 	movq xmm0, rsi
 	mov rdi, .float_format_string
 	mov rax, 1
+	mov rsi, rsp
+	and rsp, -16 
 	call printf
+	mov rsp, rsi
 
 	leave
 	ret

@@ -1852,11 +1852,7 @@ end;; (* struct Reader *)
 
 #use "semantic-analyser.ml";;
 
-let counter = ref 0;;
-let next_val= 
-  fun ()->
-  counter:=(!counter)+1;
-  !counter;;
+
 
 
 let rec make_const_list =
@@ -2032,7 +2028,7 @@ let rec fill_index=
 
 
     let rec make_generate=
-      fun (expr',currGen,constTable,fvarTable,envSize)->
+      fun (expr',currGen,constTable,fvarTable,envSize)-> 
       match expr' with
       | Const'(c)-> concate_string_list ([currGen; "mov rax, ";addressInConstTable(constTable,c);"\n"],"")
       | Var'(VarFree(c))->concate_string_list ([currGen; "mov rax, qword [";labelInFVarTable(fvarTable,c);"]\n"],"")
@@ -2054,60 +2050,61 @@ let rec fill_index=
                                                         "MALLOC rax, WORD_SIZE\n";
                                                         "pop qword [rax]\n"],"")                   
 
-      | BoxGet'(v)->let varGetGenCodeExpand= make_generate(Var'(v),currGen,constTable,fvarTable,envSize) in
-                      concate_string_list ([varGetGenCodeExpand;
+      | BoxGet'(v)->let varGetGenCodeExpand= make_generate(Var'(v),"",constTable,fvarTable,envSize) in
+                      concate_string_list ([currGen;varGetGenCodeExpand;
                                             "mov rax, qword [rax]\n"],"")
  
-      | BoxSet' (v,expr) -> let genCodeExpr_expandCurrGen= make_generate (expr,currGen,constTable,fvarTable,envSize) in
-                            concate_string_list ([genCodeExpr_expandCurrGen;
+      | BoxSet' (v,expr) -> let genCodeExpr_expandCurrGen= make_generate (expr,"",constTable,fvarTable,envSize) in
+                            concate_string_list ([currGen;genCodeExpr_expandCurrGen;
                                                   "push rax\n";
                                                   make_generate(Var'(v),"",constTable,fvarTable,envSize);
                                                   "pop qword [rax]\n";
                                                   "mov rax, consts+0\n"],"")
-      | Def'(Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
-                                          concate_string_list ([genCodeExpr2_expandCurrGen; 
+      | Def'(Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,"",constTable,fvarTable,envSize) in
+                                          concate_string_list ([currGen;genCodeExpr2_expandCurrGen; 
                                           "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
                                           "mov rax, consts+0\n"],"")
-      | If' (_test,_then,_else)-> let index=next_val() in let testGenCode_expand= concate_string_list([make_generate(_test,currGen,constTable,fvarTable,envSize);
+      | If' (_test,_then,_else)-> let _=next_val() in let index1=(!counter) in
+                                    let testGenCode_expand= concate_string_list([make_generate(_test,"",constTable,fvarTable,envSize);
                                                                               "cmp rax, consts+2\n";
-                                                                              "je Lelse";string_of_int index;"\n"],"") in   
-                                  let thenGenCode_expand= concate_string_list([make_generate(_then,testGenCode_expand,constTable,fvarTable,envSize);
-                                                                              "jmp Lexit";string_of_int index ;"\n";
-                                                                              "Lelse";string_of_int index ;":\n"],"") in 
-                                  let elseGenCode_expand= concate_string_list([make_generate(_else,thenGenCode_expand,constTable,fvarTable,envSize);
-                                                                              "Lexit";string_of_int index ;":\n"],"") in 
-                                  elseGenCode_expand
+                                                                              "je Lelse";string_of_int index1 ;"\n"],"") in  let _=next_val() in 
+                                    let thenGenCode_expand= concate_string_list([make_generate(_then,"",constTable,fvarTable,envSize);
+                                                                              "jmp Lexit";string_of_int index1 ;"\n";
+                                                                              "Lelse";string_of_int index1 ;":\n"],"") in let _=next_val() in
+                                    let elseGenCode_expand= concate_string_list([make_generate(_else,"",constTable,fvarTable,envSize);
+                                                                              "Lexit";string_of_int index1 ;":\n"],"") in let _=next_val() in
+                              concate_string_list ([currGen;testGenCode_expand;thenGenCode_expand;elseGenCode_expand],"")
       | Seq'(exprList)-> let stringGenlist= (List.map (fun expr-> make_generate(expr,"",constTable,fvarTable,envSize)) exprList) in
                           concate_string_list ((List.concat [[currGen];stringGenlist]),"")
-      | Set' (Var'(VarParam(_,mnr)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
-                                               concate_string_list ([genCodeExpr2_expandCurrGen; 
+      | Set' (Var'(VarParam(_,mnr)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,"",constTable,fvarTable,envSize) in
+                                               concate_string_list ([currGen;genCodeExpr2_expandCurrGen; 
                                                                     "mov qword [rbp+8*(4+";string_of_int mnr ;")], rax\n";
                                                                     "mov rax, consts+0\n"],"")
-      | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in 
-                                                    concate_string_list ([genCodeExpr2_expandCurrGen; 
+      | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,"",constTable,fvarTable,envSize) in 
+                                                    concate_string_list ([currGen;genCodeExpr2_expandCurrGen; 
                                                                           "mov rbx, qword [rbp+8*2]]\n";
                                                                           "mov rbx, qword [rbx+8*";string_of_int mjr ;"]\n";
                                                                           "mov qword [rbx+8*";string_of_int mnr ;"], rax\n";
                                                                           "mov rax, consts+0\n"],"")
-      | Set' (Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,currGen,constTable,fvarTable,envSize) in
-                                    concate_string_list ([genCodeExpr2_expandCurrGen; 
+      | Set' (Var'(VarFree(c)),expr2)-> let genCodeExpr2_expandCurrGen= make_generate (expr2,"",constTable,fvarTable,envSize) in
+                                    concate_string_list ([currGen;genCodeExpr2_expandCurrGen; 
                                     "mov qword [";labelInFVarTable(fvarTable,c);"], rax\n";
                                     "mov rax, consts+0\n"],"")
 
 
       | Or'(exprList)-> let subListWithoutLast=(List.rev (List.tl (List.rev (exprList) ))) in
                         let lastExpr=(List.nth exprList ((List.length exprList)-1)) in
-                        let index=next_val() in
+                        next_val();let index=counter.contents in
                         let stringGenlist= (List.map (fun expr-> concate_string_list ([make_generate(expr,"",constTable,fvarTable,envSize);
                                                                                       "cmp rax, qword consts+2\n";
-                                                                                      "jne Lexit";string_of_int (index);"\n"],"")) subListWithoutLast) in
+                                                                                      "jne Lexit";string_of_int index;"\n"],"")) subListWithoutLast) in
                         let final_string_gen_list=(List.concat [stringGenlist; [(concate_string_list ( [make_generate(lastExpr,"",constTable,fvarTable,envSize);
                                                                                                       "Lexit";string_of_int index;":\n"],""))]]) in
                         concate_string_list ((List.concat [[currGen];final_string_gen_list]),"")
       | Applic'(proc,exprList)->let pushMagic=concate_string_list(["push SOB_NIL_ADDRESS\n"],"")in 
-                                let argCode= List.fold_right (fun  expr' acc-> concate_string_list([acc; make_generate (expr',currGen,constTable,fvarTable,envSize);"push rax\n"],"")) exprList "" in
+                                let argCode= List.fold_right (fun  expr' acc-> concate_string_list([acc; make_generate (expr',"",constTable,fvarTable,envSize);"push rax\n"],"")) exprList "" in
                                   let argNumber=concate_string_list (["push ";(string_of_int (List.length exprList));"\n" ],"") in
-                                   let procCode= make_generate (proc,currGen,constTable,fvarTable,envSize) in
+                                   let procCode= make_generate (proc,"",constTable,fvarTable,envSize) in
                                     (*need to add verify clouser maybe in assembly or maybe in ocaml*)
                                     let pushEnv=concate_string_list (["CLOSURE_ENV r9, rax\n";
                                                                       "push r9\n";
@@ -2128,7 +2125,7 @@ let rec fill_index=
 
       | LambdaSimple'(params,body)->let extEnvSize=envSize+1 in
                                         let bodyGenCode= make_generate(body,"",constTable,fvarTable,extEnvSize) in
-                                         let index=next_val() in
+                                         let _= next_val() in let index=counter.contents in
                                           let checkDummyFrame= concate_string_list ([currGen;
                                                                                       "mov rdi, qword [rsp+2*8]\n";
                                                                                       "lea rsi, [consts+1]\n";
@@ -2154,8 +2151,8 @@ let rec fill_index=
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
                                                                                   "dec rcx\n";
                                                                                   "cmp rcx, 0x0\n";
-                                                                                  "je endInsert";string_of_int (index);"\n";
-                                                                                  "InsertParam";string_of_int (index);":\n";
+                                                                                  "je endInsert";string_of_int index;"\n";
+                                                                                  "InsertParam";string_of_int index;":\n";
                                                                                   "dec rcx\n";
                                                                                   "lea r10, [rbp + 4*8 + rcx*WORD_SIZE]\n";
                                                                                   "mov r9, qword [r10]\n";
@@ -2163,7 +2160,7 @@ let rec fill_index=
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
                                                                                   "cmp rcx, 0x0\n";
                                                                                   "jne InsertParam";string_of_int index;"\n";
-                                                                                  "endInsert";string_of_int (index);":\n";
+                                                                                  "endInsert";string_of_int index;":\n";
                                                                                   "lea rax, [rax+WORD_SIZE]\n";
                                                                                   "push rax\n";
                                                                                   "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
@@ -2214,7 +2211,7 @@ let rec fill_index=
       | LambdaOpt'(params,opt,body)-> let extEnvSize=envSize+1 in
                                         let bodyGenCode= make_generate(body,"",constTable,fvarTable,extEnvSize) in
                                         let paramSize=(List.length params) in
-                                        let index=next_val() in
+                                        let _= next_val() in let index=counter.contents in
                                         let optAvailable= not (String.equal opt "") in
                                           let checkDummyFrame= concate_string_list ([currGen;
                                                                                       "mov rdi, qword [rsp+2*8]\n";
@@ -2241,8 +2238,8 @@ let rec fill_index=
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
                                                                                   "dec rcx\n";
                                                                                   "cmp rcx, 0x0\n";
-                                                                                  "je endInsert";string_of_int (index);"\n";
-                                                                                  "InsertParam";string_of_int (index);":\n";
+                                                                                  "je endInsert";string_of_int index;"\n";
+                                                                                  "InsertParam";string_of_int index;":\n";
                                                                                   "dec rcx\n";
                                                                                   "lea r10, [rbp + 4*8 + rcx*WORD_SIZE]\n";
                                                                                   "mov r9, qword [r10]\n";
@@ -2250,7 +2247,7 @@ let rec fill_index=
                                                                                   "lea rax, [rax-WORD_SIZE]\n";
                                                                                   "cmp rcx, 0x0\n";
                                                                                   "jne InsertParam";string_of_int index;"\n";
-                                                                                  "endInsert";string_of_int (index);":\n";
+                                                                                  "endInsert";string_of_int index;":\n";
                                                                                   "lea rax, [rax+WORD_SIZE]\n";
                                                                                   "push rax\n";
                                                                                   "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
@@ -2340,12 +2337,8 @@ let rec fill_index=
                                                   codeClosure
       |_->currGen
       (* (*~~~~~~~~~~~NEED TO IMPLEMENT~~~~~~~~~~~~~~~~~~~~~~~~*)
-      | ApplicTP'(expr,exprList)->*)
-      and makeSeqCode=
-        fun (listExpr,constTable,fvarTable,envSize,index,curr)->
-        match listExpr with
-        |[]->curr
-        |car::cdr-> makeSeqCode(cdr,constTable,fvarTable,envSize,index+1,concate_string_list ([curr; (make_generate(car,"",constTable,fvarTable,envSize))],""));;
+      | ApplicTP'(expr,exprList)->*);;
+      
       
 (*let rec print_listOfPr =
   fun listP->
@@ -2370,14 +2363,18 @@ module type CODE_GEN = sig
 end;;
 
 module Code_Gen : CODE_GEN = struct
-let primitive_fvar_table=[("boolean?",0);("float?",0);("integer?",0);("pair?",0);("null?",0);("char?",0);("vector?",0);("string?",0);("procedure?",0);("symbol?",0);("string-length",0);("string-ref",0);("string-set!",0);("make-string",0);("vector-length",0);("vector-ref",0);("vector-set!",0);("make-vector",0);("symbol->string",0);("char->integer",0);("integer->char",0);("eq?",0);("+",0);("*",0);("-",0);("/",0);("<",0);("=",0)]
+let primitive_fvar_table=[("boolean?",0);("float?",0);("integer?",0);("pair?",0);("null?",0);("char?",0);("vector?",0);("string?",0);
+                          ("procedure?",0);("symbol?",0);("string-length",0);("string-ref",0);("string-set!",0);("make-string",0);
+                          ("vector-length",0);("vector-ref",0);("vector-set!",0);("make-vector",0);("symbol->string",0);
+                          ("char->integer",0);("integer->char",0);("eq?",0);("+",0);("*",0);("-",0);("/",0);("<",0);("=",0);
+                          ("cons",0);("car",0);("cdr",0);("set-car!",0);("set-cdr!",0)]
 
   let make_consts_tbl asts =  let tables= (List.flatten(List.map make_const_list asts)) in 
                                 let final_table= make_const_tbl( (sort_topologic(remove_duplicates (tables))) ,[] , 0 ) in
                             (List.map (fun (a,b,c)->(a,(b,c))) final_table) ;;
   let make_fvars_tbl asts = fill_index((remove_duplicates_fvars(build_fvars_table (asts,primitive_fvar_table))),[],0);;
 
-  let generate consts fvars e = make_generate (e,"",consts,fvars,0);;
+  let generate consts fvars e = next_val(); make_generate (e,"",consts,fvars,0);;
 end;;
 
 
