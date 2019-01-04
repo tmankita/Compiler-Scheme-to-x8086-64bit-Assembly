@@ -235,6 +235,13 @@
 	lea rdi, [8*5+8*%2]
 	add rsp, rdi
 %endmacro
+
+%macro FLATTERN_LIST 1 ;	%1 - proper List ; return in rax the length of the list
+	push rax
+	mov rcx, 0
+	%%loopForFlat:
+		CAR rax, %1
+		
 	
 extern exit, printf, malloc
 global write_sob, write_sob_if_not_void
