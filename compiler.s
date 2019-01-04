@@ -203,7 +203,38 @@
 	db %1
 %%end_str:
 %endmacro
+%macro SHIFT_FRAME 2 ; %1 = Size of current frame ; %2 = n that in stack of prev frame
+	push rax
+	
+	mov rax, %2
+	add rax, 5
+	mov rcx, %1
+	mov r13, 0x1
 
+
+%%shift_loop:	
+	dec rax
+	lea r15, [WORD_SIZE*r13]
+	mov rdx, rbp
+	sub rdx, r15
+	mov r15, qword [rdx]
+
+	mov rdi, r15 
+	push rdi
+
+	lea r12, [WORD_SIZE*rax] 
+	add r12, rbp
+
+	pop qword [r12] 
+	add r13, 0x1
+	dec rcx
+	cmp rcx, 0x0
+	jg %%shift_loop
+
+	pop rax
+	lea rdi, [8*5+8*%2]
+	add rsp, rdi
+%endmacro
 	
 extern exit, printf, malloc
 global write_sob, write_sob_if_not_void
