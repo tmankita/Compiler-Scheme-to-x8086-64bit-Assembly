@@ -27,7 +27,7 @@ let primitive_names_to_labels =
    "make-vector", "make_vector"; "symbol->string", "symbol_to_string"; 
    "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
    "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ";
-   "cons","cons_pair";"car","car_pair";"cdr","cdr_pair";"set-car!","set_car";"set-cdr!","set_cdr"];;
+   "cons","cons_pair";"car","car_pair";"cdr","cdr_pair";"set-car!","set_car";"set-cdr!","set_cdr";"apply","apply_as"];;
 let const_eq =
   fun (c1,c2)->
   match c1, c2 with
@@ -204,7 +204,134 @@ let epilogue =
     mov rax, SOB_FALSE_ADDRESS
   .return:
     leave
-    ret";;
+    ret
+    
+  apply_as:
+    push rbp
+    mov r14, rbp
+    mov rbp, rsp
+    mov rdi,qword [rbp+8*3]
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    mov rsi, qword [r10]      ;;rsi hold the properList
+    mov cl, byte [rsi]
+    cmp cl, T_PAIR
+    jne .noList
+
+    ;;;starting frame of reverse function
+    push SOB_NIL_ADDRESS
+    mov rax, rsi
+    push rax
+    push 1
+    mov rax, qword [fvar_tbl+35*WORD_SIZE]
+    CLOSURE_ENV r9, rax
+    push r9
+    CLOSURE_CODE r9, rax
+    call r9
+    add rsp, 8*1   ;pop env
+    pop rbx        ;pop arg count
+    shl rbx, 3     ;rbx = rbx*8
+    add rsp, rbx   ;pop args
+    add rsp, 8*1   ;pop magic
+    ;;;; reverse list in rax;;;
+    push SOB_NIL_ADDRESS          ;;pushing magic
+    mov rcx, 0x0                  ;;rcx counter of elemnts in proper list
+    ;;;; pushing all elements in proper list bn-1-b0  to stack
+    .pushingLoop_bs:
+    CAR rsi, rax
+    push rsi
+    inc rcx
+    CDR rsi, rax
+    cmp rsi, SOB_NIL_ADDRESS             
+    je .endLoop_bs
+    mov rax, rsi
+    jmp .pushingLoop_bs
+    .endLoop_bs:
+    ;;; now pushing an-1-a0 elemants 
+    mov rdi, qword [rbp+8*3]
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    sub r10, WORD_SIZE        ;;;; skip proper list
+    sub rdi,0x1     ;no need to copy proper list
+    sub rdi,0x1     ;no need to copy f
+    cmp rdi, 0x0
+    jle .endPushing_as 
+    push qword [r10]
+    sub rdi,0x1
+    cmp rdi, 0x0
+    jle .endPushing_as    
+    .pushingLoop_as:
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    push qword [r10]
+    sub rdi,0x1
+    cmp rdi, 0x0
+    jg .pushingLoop_as
+    .endPushing_as:
+    ;;;end pushing an-1-a0
+    mov rdi, qword [rbp+8*3]
+    sub rdi, 0x2                ;;sub from the count the f and properlist 
+    add rdi, rcx
+    ;;pushing the new n= as + bs
+    push rdi              ;;push new n to stack
+    mov r15, rdi                 ;;r15 hold new n
+    add r15, 0x4
+    ;; pushing env
+    mov rax, PVAR(0)
+    CLOSURE_ENV r9, rax
+    push r9
+    CLOSURE_CODE r9, rax   ;; r12 hold the code of f
+    ;;pushing ret address
+    push qword [rbp+8*1]
+    ;; shift frames
+    lea r10,[rbp+3*8]
+    mov r8, [r10]           ;;n of the prev frame
+    SHIFT_FRAME r15, r8
+    mov rbp, r14                ;;pushing old rbp before change
+    mov rax, r9
+  
+    jmp rax    ;jump to code
+
+  .noList:
+    ;build new frame for shifting
+    push SOB_NIL_ADDRESS          ;;pushing magic
+    ;;; now pushing an-1-a0 elemants 
+    mov rdi, qword [rbp+8*3]
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    sub rdi,0x1     ;no need to copy f
+    cmp rdi, 0x0
+    jle .endPushing_as_no_list 
+    push qword [r10]
+    sub rdi,0x1
+    cmp rdi, 0x0
+    jle .endPushing_as_no_list    
+    .pushingLoop_as_no_list:
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    push qword [r10]
+    sub rdi,0x1
+    cmp rdi, 0x0
+    jg .pushingLoop_as_no_list
+    .endPushing_as_no_list:
+    ;;;end pushing an-1-a0
+    mov rdi, qword [rbp+8*3]
+    sub rdi, 0x1                ;;sub from the count only one because f 
+    ;;pushing the new n= as 
+    push rdi              ;;push new n to stack
+    mov r15, rdi                 ;;r15 hold new n
+    add r15, 0x4
+    ;; pushing env
+    mov rax, PVAR(0)
+    CLOSURE_ENV r9, rax
+    push r9
+    CLOSURE_CODE r9, rax   ;; r12 hold the code of f
+    ;;pushing ret address
+    push qword [rbp+8*1]
+    ;; shift frames
+    lea r10,[rbp+3*8]
+    mov r8, [r10]           ;;n of the prev frame
+    SHIFT_FRAME r15, r8
+    mov rbp, r14                ;;pushing old rbp before change
+    mov rax, r9
+  
+    jmp rax    ;jump to code
+    ";;
 
 let rec print_listOfTuples = 
   fun listT->

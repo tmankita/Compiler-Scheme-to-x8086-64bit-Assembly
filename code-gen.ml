@@ -293,8 +293,7 @@ let rec fill_index=
                                                                             "push qword [rbp + 8*1]   ;old ret addres\n";
                                                                             "mov r14, qword [rbp]\n";
                                                                             "SHIFT_FRAME r9, r8\n";
-                                                                            "push r14\n";
-                                                                            "add rax, 0x1\n";
+                                                                            "mov rbp, r14\n";
                                                                             "jmp rax    ;jump to code\n"],"") in
                                           applicCode
       | LambdaSimple'(params,body)->let extEnvSize=envSize+1 in
@@ -567,7 +566,7 @@ let primitive_fvar_table=[("boolean?",0);("float?",0);("integer?",0);("pair?",0)
                           ("procedure?",0);("symbol?",0);("string-length",0);("string-ref",0);("string-set!",0);("make-string",0);
                           ("vector-length",0);("vector-ref",0);("vector-set!",0);("make-vector",0);("symbol->string",0);
                           ("char->integer",0);("integer->char",0);("eq?",0);("+",0);("*",0);("-",0);("/",0);("<",0);("=",0);
-                          ("cons",0);("car",0);("cdr",0);("set-car!",0);("set-cdr!",0)]
+                          ("cons",0);("car",0);("cdr",0);("set-car!",0);("set-cdr!",0);("apply",0)]
 
   let make_consts_tbl asts =  let tables= (List.flatten(List.map make_const_list asts)) in 
                                 let final_table= make_const_tbl( (sort_topologic(remove_duplicates (tables))) ,[] , 0 ) in
