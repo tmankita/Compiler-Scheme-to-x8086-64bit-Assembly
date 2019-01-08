@@ -36,7 +36,7 @@
    | String(s1), String(s2) -> s1 = s2
    | Symbol(s1), Symbol(s2) -> s1 = s2
    | Pair(car1, cdr1), Pair(car2, cdr2) -> (sexpr_eq car1 car2) && (sexpr_eq cdr1 cdr2)
-   | Vector(l1), Vector(l2) -> List.for_all2 sexpr_eq l1 l2
+   | Vector(l1), Vector(l2) -> if ((List.length l1) = (List.length l2)) then (List.for_all2 sexpr_eq l1 l2) else false
    | _ -> false;;
 
       
@@ -368,7 +368,7 @@ end
   
     let rec nt_sexpr_three_dotted = 
       function 
-       |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD;  make_Number;  make_symbolD;  make_StringD ;   make_DottedlistD;make_listD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
+       |_->PC.pack (PC.caten (PC.star (PC.disj make_commentLineD make_SexprComemntD)) (PC.caten (PC.disj_list [make_emptyD;make_NilD;make_booleanD; make_CharD;  make_Number;  make_symbolD;  make_StringD ;   make_listD;make_DottedlistD;  make_vectorD;make_QuotedD;make_QQuotedD;make_UnquotedD;make_UnquotedSplicedD] ) (PC.star (PC.disj make_commentLineD make_SexprComemntD)))) 
        (fun (nil1,(sexpr,nil2)) -> sexpr)
       
   
@@ -490,7 +490,7 @@ end
        
        let rec nt_sexpr = 
        function
-        |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;   make_list; make_Dottedlist; make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
+        |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;   make_list;make_Dottedlist;   make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
                           (fun (  (nil1 , ( sexpr , nil2 ) ), opt ) ->  sexpr)
     
   

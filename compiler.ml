@@ -71,6 +71,7 @@ malloc_pointer:
 
 
 section .data
+
 consts:
 " ^ (String.concat "\n" (List.map make_constant consts_tbl)) ^ "
 
@@ -78,8 +79,8 @@ consts:
 ;;; definitions in the epilogue to work properly
 %define SOB_VOID_ADDRESS " ^ get_const_address Void ^ "
 %define SOB_NIL_ADDRESS " ^ get_const_address (Sexpr Nil) ^ "
-%define SOB_FALSE_ADDRESS " ^ get_const_address (Sexpr (Bool true)) ^ "
-%define SOB_TRUE_ADDRESS " ^ get_const_address (Sexpr (Bool false)) ^ "
+%define SOB_FALSE_ADDRESS " ^ get_const_address (Sexpr (Bool false)) ^ "
+%define SOB_TRUE_ADDRESS " ^ get_const_address (Sexpr (Bool true)) ^ "
 
 fvar_tbl:
 " ^ (String.concat "\n" (List.map (fun _ -> "dq T_UNDEFINED") fvars_tbl)) ^ "
@@ -119,7 +120,11 @@ code_fragment:
 " ^ (String.concat "\n" (List.map make_primitive_closure primitive_names_to_labels)) ^ "
 
 ";;
-
+(* mov rax, 1
+   mov rdi, 1
+   mov rsi, st1
+   mov rdx, str_len
+   syscall*)
 let epilogue = 
   "cons_pair:
     push rbp
@@ -176,7 +181,7 @@ let epilogue =
     mov rdi, PVAR(1) 
     push rdi
     pop qword [rsi]
-    mov rax, PVAR(0)   
+    mov rax, consts+0   
     jmp .return
 
   .wrong_type:
@@ -197,7 +202,7 @@ let epilogue =
     mov rdi, PVAR(1) 
     push rdi
     pop qword [rsi]
-    mov rax, PVAR(0)   
+    mov rax, consts+0   
     jmp .return
 
   .wrong_type:
@@ -205,19 +210,23 @@ let epilogue =
   .return:
     leave
     ret
-    
-  apply_as:
+
+    apply_as:
+
     push rbp
-    mov r14, rbp
     mov rbp, rsp
+
+
     mov rdi,qword [rbp+8*3]
     lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
     mov rsi, qword [r10]      ;;rsi hold the properList
     mov cl, byte [rsi]
     cmp cl, T_PAIR
     jne .noList
+ 
 
     ;;;starting frame of reverse function
+
     push SOB_NIL_ADDRESS
     mov rax, rsi
     push rax
@@ -232,10 +241,12 @@ let epilogue =
     shl rbx, 3     ;rbx = rbx*8
     add rsp, rbx   ;pop args
     add rsp, 8*1   ;pop magic
+
     ;;;; reverse list in rax;;;
     push SOB_NIL_ADDRESS          ;;pushing magic
     mov rcx, 0x0                  ;;rcx counter of elemnts in proper list
     ;;;; pushing all elements in proper list bn-1-b0  to stack
+
     .pushingLoop_bs:
     CAR rsi, rax
     push rsi
@@ -259,7 +270,7 @@ let epilogue =
     cmp rdi, 0x0
     jle .endPushing_as    
     .pushingLoop_as:
-    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    sub r10, WORD_SIZE       
     push qword [r10]
     sub rdi,0x1
     cmp rdi, 0x0
@@ -283,28 +294,49 @@ let epilogue =
     ;; shift frames
     lea r10,[rbp+3*8]
     mov r8, [r10]           ;;n of the prev frame
+    mov rbx, qword [rbp]
+
     SHIFT_FRAME r15, r8
-    mov rbp, r14                ;;pushing old rbp before change
+    mov rbp, rbx               ;;pushing old rbp before change
     mov rax, r9
   
     jmp rax    ;jump to code
 
   .noList:
+  ;;check base case that a0=null
+    mov rdx,qword [rbp+8*5] ;;rdi hold  the elemant supose to be a0 
+    mov rdi,qword [rbp+8*3]
+    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    mov rsi, qword [r10]      ;;rsi hold the properList
+    cmp rsi, rdx
+    je .end_no_list_no_params
     ;build new frame for shifting
     push SOB_NIL_ADDRESS          ;;pushing magic
-    ;;; now pushing an-1-a0 elemants 
+    ;;; now pushing an-1-a0 elemants
+    mov rbx,0x0     ;;;;;;;;;;;;;; 
     mov rdi, qword [rbp+8*3]
     lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    push r9
+    mov r9, qword [r10]
+    cmp r9, SOB_NIL_ADDRESS
+    jne .not_sub_one
+    sub r10, WORD_SIZE
+    sub rdi,0x1   ;;no need emtpy list
+    .not_sub_one:
+    pop r9
     sub rdi,0x1     ;no need to copy f
     cmp rdi, 0x0
     jle .endPushing_as_no_list 
+    add rbx, 0x1
     push qword [r10]
+    sub r10, WORD_SIZE       
     sub rdi,0x1
     cmp rdi, 0x0
     jle .endPushing_as_no_list    
     .pushingLoop_as_no_list:
-    lea r10, [rbp + 3*8 + rdi*WORD_SIZE]
+    add rbx, 0x1
     push qword [r10]
+    sub r10, WORD_SIZE        
     sub rdi,0x1
     cmp rdi, 0x0
     jg .pushingLoop_as_no_list
@@ -313,7 +345,7 @@ let epilogue =
     mov rdi, qword [rbp+8*3]
     sub rdi, 0x1                ;;sub from the count only one because f 
     ;;pushing the new n= as 
-    push rdi              ;;push new n to stack
+    push rbx              ;;push new n to stack
     mov r15, rdi                 ;;r15 hold new n
     add r15, 0x4
     ;; pushing env
@@ -326,12 +358,37 @@ let epilogue =
     ;; shift frames
     lea r10,[rbp+3*8]
     mov r8, [r10]           ;;n of the prev frame
+    mov rbx, qword [rbp]
+
     SHIFT_FRAME r15, r8
-    mov rbp, r14                ;;pushing old rbp before change
+    mov rbp, rbx               ;;pushing old rbp before change
     mov rax, r9
   
     jmp rax    ;jump to code
-    ";;
+
+
+  .end_no_list_no_params:
+    push SOB_NIL_ADDRESS          ;;pushing magic
+    push 0x0                      ;;new n=0
+    mov r15, 0x4
+    ;; pushing env
+    mov rax, PVAR(0)
+    CLOSURE_ENV r9, rax
+    push r9
+    CLOSURE_CODE r9, rax   ;; r12 hold the code of f
+    ;;pushing ret address
+    push qword [rbp+8*1]
+    ;; shift frames
+    lea r10,[rbp+3*8]
+    mov r8, [r10]           ;;n of the prev frame
+    mov rbx, qword [rbp]
+
+    SHIFT_FRAME r15, r8
+    mov rbp, rbx               ;;pushing old rbp before change
+    mov rax, r9
+  
+    jmp rax    ;jump to code
+";;
 
 let rec print_listOfTuples = 
   fun listT->
@@ -344,7 +401,7 @@ exception X_missing_input_file;;
 try
 
   let infile = Sys.argv.(1) in
-  let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in
+  let code =   (file_to_string "stdlib.scm")^(file_to_string infile)   in
   let asts = string_to_asts code in
   let consts_tbl = Code_Gen.make_consts_tbl asts in
   let fvars_tbl = Code_Gen.make_fvars_tbl asts in (*print_string "\n";print_string "[";print_listOfTuples fvars_tbl;print_string "\n";*)

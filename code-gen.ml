@@ -74,11 +74,17 @@ let rec find_in_const_table=
 
 let make_string_for_vector =
   fun (sexprList,table)->
+  if ((List.length sexprList)=0) then concate_string_list (["MAKE_LITERAL_VECTOR"],"") else
   let middle_string_list = (List.map (fun sexpr-> (concate_string_list (["consts+"; (string_of_int (find_in_const_table (table,Sexpr(sexpr)))) ; "," ],"") )) sexprList) in
   let concate_string_list_1= (concate_string_list (middle_string_list, "")) in
    let fixed_string =(String.sub concate_string_list_1 (0) (String.length concate_string_list_1 -1)) in
-    concate_string_list (["MAKE_LITERAL_VECTOR(";  fixed_string; ")"],"")
+    concate_string_list (["MAKE_LITERAL_VECTOR ";  fixed_string],"")
 
+  let rec make_string_macro =
+    fun str->
+    match str with
+    |""->[]
+    |s-> [(string_of_int (Char.code (String.get s 0)));"," ]::(make_string_macro (String.sub s 1 ((String.length s)-1)))
 
 let make_tuple_for_const =
   fun (const,table,size)->
@@ -88,15 +94,15 @@ let make_tuple_for_const =
   | Sexpr(Bool(c))->if (c) then [(Sexpr(Bool(true)) ,4 ,"MAKE_BOOL(1)" )], 6 else [(Sexpr(Bool(false)) ,2 ,"MAKE_BOOL(0)" )], 4
   | Sexpr(Number(Int(c)))-> [(Sexpr(Number(Int(c))) ,size , concate_string_list (["MAKE_LITERAL_INT(";string_of_int c ;")"],"") )] ,size+8+1
   | Sexpr(Number(Float(c)))->[(Sexpr(Number(Float(c))) ,size , concate_string_list (["MAKE_LITERAL_FLOAT(";string_of_float c ;")"],"") )] ,size+8+1
-  | Sexpr(Char(c))-> [(Sexpr(Char(c)) ,size ,concate_string_list (["MAKE_LITERAL_CHAR('";Char.escaped c ;"')"],"") ) ],size+2
-  | Sexpr(String(c))-> [(Sexpr(String(c)) ,size ,concate_string_list (["MAKE_LITERAL_STRING \"";c ;"\""],"") )], size+8+1+(String.length c)
-  | Sexpr(Symbol(c))-> let index =(find_in_const_table (table,Sexpr(String(c)))) in if (index=(-1)) then  ([(Sexpr(String(c)),size,concate_string_list (["MAKE_LITERAL_STRING \"";c ;"\" "],""));
+  | Sexpr(Char(c))-> [(Sexpr(Char(c)) ,size ,concate_string_list (["MAKE_LITERAL_CHAR(";string_of_int (Char.code c) ;")"],"") ) ],size+2
+  | Sexpr(String(c))-> if (String.equal c "") then ([(Sexpr(String(c))) ,size, "MAKE_LITERAL_STRING"], size+8+1+0) else [(Sexpr(String(c)) ,size ,concate_string_list ((List.rev(List.tl(List.rev(List.concat [["MAKE_LITERAL_STRING "];(List.flatten (make_string_macro c))]))) ),"") )], size+8+1+(String.length c)
+  | Sexpr(Symbol(c))-> let index =(find_in_const_table (table,Sexpr(String(c)))) in if (index=(-1)) then  ([(Sexpr(String(c)),size,concate_string_list ((List.rev(List.tl(List.rev(List.concat [["MAKE_LITERAL_STRING "];(List.flatten (make_string_macro c))]))) ),""));
                                                                                                             (Sexpr(Symbol(c)), size+(String.length c)+8+1,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int size ;")"],""))]
                                                                                                           ,size+(String.length c) +1+8+1+8) 
                                                                                                         else [(Sexpr(Symbol(c)),size,concate_string_list (["MAKE_LITERAL_SYMBOL(consts+";string_of_int index ;")"],""))],size+8+1
   | Sexpr(Pair(car,cdr))->  [(Sexpr(Pair(car,cdr)),size ,concate_string_list (["MAKE_LITERAL_PAIR(consts+";string_of_int (find_in_const_table (table,Sexpr(car))) ;" ,consts+";string_of_int (find_in_const_table (table,Sexpr(cdr)));")"],"") )], size+1+8+8
   | Sexpr(Vector(sexprList))->let string_for_vector= (make_string_for_vector (sexprList,table)) in
-                                              ([(Sexpr(Vector(sexprList)),size,   string_for_vector )],(List.length sexprList)*8+8+1);;
+                                              ([(Sexpr(Vector(sexprList)),size,   string_for_vector )],size+(List.length sexprList)*8+8+1);;
 
 
 let rec make_const_tbl=
@@ -190,19 +196,21 @@ let rec fill_index=
 
       | Box' (VarFree(c))-> concate_string_list ([currGen;
                                                  "lea rax, [";labelInFVarTable(fvarTable,c);"]\n";
-                                                 "push rax\n";
+                                                 "push qword [rax]\n";
                                                  "MALLOC rax, WORD_SIZE\n";
                                                  "pop qword [rax]\n"],"") 
       | Box' (VarParam(c,mnr))->   concate_string_list ([currGen;
                                                         "lea rax, [rbp+8*(4+";string_of_int mnr ;")]\n";
-                                                        "push rax\n";
+                                                        "push qword [rax]\n";
                                                         "MALLOC rax, WORD_SIZE\n";
                                                         "pop qword [rax]\n"],"")                   
 
-      | BoxGet'(v)->let varGetGenCodeExpand= make_generate(Var'(v),"",constTable,fvarTable,envSize) in
-                      concate_string_list ([currGen;varGetGenCodeExpand;
-                                            "mov rax, qword [rax]\n"],"")
  
+      | BoxGet'(v)->let _=next_val() in let index1=(!counter) in let varGetGenCodeExpand= make_generate(Var'(v),"",constTable,fvarTable,envSize) in
+                      concate_string_list ([currGen;varGetGenCodeExpand;
+                                          "BoxGet";string_of_int index1;":\n";
+                                            "mov rax, qword [rax]\n"],"")
+
       | BoxSet' (v,expr) -> let genCodeExpr_expandCurrGen= make_generate (expr,"",constTable,fvarTable,envSize) in
                             concate_string_list ([currGen;genCodeExpr_expandCurrGen;
                                                   "push rax\n";
@@ -215,7 +223,7 @@ let rec fill_index=
                                           "mov rax, consts+0\n"],"")
       | If' (_test,_then,_else)-> let _=next_val() in let index1=(!counter) in
                                     let testGenCode_expand= concate_string_list([make_generate(_test,"",constTable,fvarTable,envSize);
-                                                                              "cmp rax, consts+4\n";
+                                                                              "cmp rax, consts+2\n";
                                                                               "je Lelse";string_of_int index1 ;"\n"],"") in  let _=next_val() in 
                                     let thenGenCode_expand= concate_string_list([make_generate(_then,"",constTable,fvarTable,envSize);
                                                                               "jmp Lexit";string_of_int index1 ;"\n";
@@ -231,7 +239,7 @@ let rec fill_index=
                                                                     "mov rax, consts+0\n"],"")
       | Set' (Var'(VarBound(_,mjr,mnr)),expr2)->let genCodeExpr2_expandCurrGen= make_generate (expr2,"",constTable,fvarTable,envSize) in 
                                                     concate_string_list ([currGen;genCodeExpr2_expandCurrGen; 
-                                                                          "mov rbx, qword [rbp+8*2]]\n";
+                                                                          "mov rbx, qword [rbp+8*2]\n";
                                                                           "mov rbx, qword [rbx+8*";string_of_int mjr ;"]\n";
                                                                           "mov qword [rbx+8*";string_of_int mnr ;"], rax\n";
                                                                           "mov rax, consts+0\n"],"")
@@ -293,7 +301,7 @@ let rec fill_index=
                                                                             "push qword [rbp + 8*1]   ;old ret addres\n";
                                                                             "mov r14, qword [rbp]\n";
                                                                             "SHIFT_FRAME r9, r8\n";
-                                                                            "mov rbp, r14\n";
+                                                                            "mov rbp, r14\n";  
                                                                             "jmp rax    ;jump to code\n"],"") in
                                           applicCode
       | LambdaSimple'(params,body)->let extEnvSize=envSize+1 in
@@ -364,13 +372,17 @@ let rec fill_index=
                                                                             "lea r10, [consts+1]\n";
                                                                             "push r10\n";
                                                                             "pop qword [rax]\n";
+                                                                            "push rax\n";
+                                                                            "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
+                                                                            "pop qword [rax]\n";
+                                                                            
                                                                             "NoMaloc";string_of_int index;":\n";
                                                                             "mov r8, rax\n";
                                                                             "mov qword rsi, ";string_of_int envSize;"\n";
                                                                             "mov rax, qword [rbp+8*2]     ;rax is start of current lexEnv\n";
                                                                             "mov qword rcx, 1\n";
                                                                             "LoopEnv";string_of_int index;":\n";
-                                                                            "lea rdi, [rax+8*rcx -8]\n";
+                                                                            "lea rdi, [rax+8*rcx -8]\n";                                                                           "lea rdi, [rax+8*rcx -8]\n";
                                                                             "mov r15, qword [rdi]\n";
                                                                             "mov rdi, r15\n";
                                                                             "lea r9, [r8+rcx*8]\n";
@@ -386,8 +398,17 @@ let rec fill_index=
                                                 let codeClosure= concate_string_list([extEnv;
                                                                                       "jmp Lcont";string_of_int index;"\n";
                                                                                       "Lcode";string_of_int index;":\n";
+                                                                                      "lea rsi, [rbp] \n";
+                                                                                      "lea rdi, [rsp-8] \n";
+                                                                                      "cmp rsi, rdi\n";
+                                                                                      "jne needPush";string_of_int index;"\n";
+                                                                                      "push qword [rbp]\n";
+                                                                                      "jmp noPush";string_of_int index;"\n";
+                                                                                      "needPush";string_of_int index;":\n";
                                                                                       "push rbp\n";
                                                                                       "mov rbp, rsp\n";
+                                                                                      "noPush";string_of_int index;":\n";
+
                                                                                       bodyGenCode;
                                                                                       "leave\n";
                                                                                       "ret\n";
@@ -464,6 +485,10 @@ let rec fill_index=
                                                                             "lea r10, [consts+1]\n";
                                                                             "push r10\n";
                                                                             "pop qword [rax]\n";
+                                                                            "push rax\n";
+                                                                            "MALLOC rax, ";string_of_int extEnvSize;"*WORD_SIZE\n";
+                                                                            "pop qword [rax]\n";
+                                                                            
                                                                             "NoMaloc";string_of_int index;":\n";
                                                                             "mov r8, rax\n";
                                                                             "mov qword rsi, ";string_of_int envSize;"\n";
@@ -491,11 +516,15 @@ let rec fill_index=
                                                                                       "mov rsi,qword [rsp+8*2]    ;rsi hold n\n";
                                                                                       "sub rsi, rdi\n";
                                                                                       "mov rcx, rsi               ;rcx hold the counterLoop= n - paramSize\n";
+                                                                                      "cmp rcx, 0x0\n";
+                                                                                      "je noNeedPair";string_of_int index;"\n";
                                                                                       "lea r10, [rsp+3*8+rdi*8]\n" ;  
                                                                                       "mov r9, r10                ;r9 hold the address of the first element that need to copy \n";
                                                                                       "lea r11, [rcx*8 -8]\n";
                                                                                       "add r10, r11             ;r10 hold the address of the element that need to copy in the loop \n";
                                                                                       "mov rsi, qword [r10]       ;rsi hold the first element that need to copy \n";
+                                                                                      "cmp rsi, SOB_NIL_ADDRESS     ; check if the variadic is empty list \n";
+                                                                                      "je noNeedPair";string_of_int index;"\n"; 
                                                                                       "mov rax, rsi\n";
                                                                                       "cmp rcx, 0x0\n";
                                                                                       "je EndOpt";string_of_int index;"\n";
@@ -515,8 +544,17 @@ let rec fill_index=
                                                                                       "EndOpt";string_of_int index;":\n";
                                                                                       "push rax             ;rax hold the pointer to optParamList\n";
                                                                                       "pop qword [r9]      ;override first opt params with optParamVector\n";
+                                                                                      "noNeedPair";string_of_int index;":\n";
+                                                                                      "lea rsi, [rbp] \n";
+                                                                                      "lea rdi, [rsp-8] \n";
+                                                                                      "cmp rsi, rdi\n";
+                                                                                      "jne needPush";string_of_int index;"\n";
+                                                                                      "push qword [rbp]\n";
+                                                                                      "jmp noPush";string_of_int index;"\n";
+                                                                                      "needPush";string_of_int index;":\n";
                                                                                       "push rbp\n";
                                                                                       "mov rbp, rsp\n";
+                                                                                      "noPush";string_of_int index;":\n";
                                                                                       bodyGenCode;
                                                                                       "leave\n";
                                                                                       "ret\n";
@@ -526,8 +564,16 @@ let rec fill_index=
                                                                   else concate_string_list([extEnv;
                                                                                       "jmp Lcont";string_of_int index;"\n";
                                                                                       "Lcode";string_of_int index;":\n";
+                                                                                      "lea rsi, [rbp] \n";
+                                                                                      "lea rdi, [rsp-8] \n";
+                                                                                      "cmp rsi, rdi\n";
+                                                                                      "jne needPush";string_of_int index;"\n";
+                                                                                      "push qword [rbp]\n";
+                                                                                      "jmp noPush";string_of_int index;"\n";
+                                                                                      "needPush";string_of_int index;":\n";
                                                                                       "push rbp\n";
                                                                                       "mov rbp, rsp\n";
+                                                                                      "noPush";string_of_int index;":\n";
                                                                                       bodyGenCode;
                                                                                       "leave\n";
                                                                                       "ret\n";

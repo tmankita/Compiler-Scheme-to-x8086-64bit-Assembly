@@ -210,20 +210,22 @@
 	add rax, 5
 	mov rcx, %1
 	mov r13, 0x1
+	lea rdx, [rbp]
+	mov r11, rdx
 
 
-%%shift_loop:	
+%%shift_loop:
+	mov rdx, r11	
 	dec rax
 	lea r15, [WORD_SIZE*r13]
-	mov rdx, rbp
 	sub rdx, r15
 	mov r15, qword [rdx]
 
 	mov rdi, r15 
 	push rdi
-
+	
 	lea r12, [WORD_SIZE*rax] 
-	add r12, rbp
+	add r12, r11
 
 	pop qword [r12] 
 	add r13, 0x1
@@ -235,6 +237,7 @@
 	lea rdi, [8*5+8*%2]
 	add rsp, rdi
 %endmacro
+
 
 %macro FLATTERN_LIST 1 ;	%1 - proper List ; return in rax the length of the list
 	push rax
