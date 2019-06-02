@@ -450,7 +450,7 @@ end
        
        and make_vectorD = 
        fun s->
-       let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (PC.maybe(PC.char ')'))))) in
+       let nt_vector= make_spaced (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (make_spaced(PC.star (nt_sexpr_three_dotted 's'))) (PC.maybe(PC.char ')'))))) in
        let ((hash,(left, (list_s, right))),s1) = (nt_vector s) in
          (Vector(list_s),s1) ;
        
@@ -490,7 +490,7 @@ end
        
        let rec nt_sexpr = 
        function
-        |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;   make_list;make_Dottedlist;   make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
+        |_->PC.pack (PC.caten (PC.caten (PC.star (PC.disj make_commentLine make_SexprComemnt)) (PC.caten (PC.disj_list [make_empty;make_Nil;make_boolean; make_Char;make_Number; make_symbol;  make_String ;  make_list;  make_Dottedlist;  make_vector;make_Quoted;make_QQuoted;make_Unquoted;make_UnquotedSpliced] ) (PC.star (PC.disj make_commentLine make_SexprComemnt)))) (PC.maybe three_dots)) 
                           (fun (  (nil1 , ( sexpr , nil2 ) ), opt ) ->  sexpr)
     
   
@@ -571,7 +571,7 @@ end
         ((List.fold_right  (fun sexp1 sexp2 -> Pair(sexp1,sexp2))  ( list_s)  (sexpr))  ,s) ;
         and make_vector = 
         fun s->
-        let nt_vector= make_spaced (PC.disj (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr_three_dotted 's')) (three_dots)))) (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (PC.star (nt_sexpr 's')) (PC.word ")")))) ) in
+        let nt_vector= make_spaced (PC.disj (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (make_spaced(PC.star (nt_sexpr_three_dotted 's'))) (three_dots)))) (PC.caten _hashSymbol_ (PC.caten (PC.char '(') (PC.caten (make_spaced(PC.star (nt_sexpr 's'))) (PC.word ")")))) ) in
         let ((hash,(left, (list_s, right))),s1) = (nt_vector s) in
           (Vector(list_s),s1) ;
         and make_Quoted = 

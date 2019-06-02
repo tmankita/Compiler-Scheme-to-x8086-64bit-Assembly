@@ -1,3 +1,19 @@
+
+(define reverse-helper
+	(let ((null? null?)(cdr cdr)(cons cons)(car car))
+ 		(lambda  (lst acc)
+  			(if (null? lst)
+      			acc
+      			(reverse-helper (cdr lst) (cons (car lst) acc))
+      		)
+  		)))
+
+(define reverse 
+	(let ((reverse-helper reverse-helper))
+		(lambda (lst)
+  			(reverse-helper lst '()))))
+
+
 (define append
   (let ((null? null?) (car car) (cdr cdr) (cons cons))
     (lambda args
@@ -100,8 +116,6 @@
 (define vector
   (let ((list->vector list->vector))
     (lambda x (list->vector x))))
-
-
 
 (define +
   (let ((null? null?)(+ +)(car car)(apply apply)(cdr cdr))

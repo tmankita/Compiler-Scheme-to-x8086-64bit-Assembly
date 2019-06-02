@@ -108,6 +108,7 @@ main:
     push rsp
 
     jmp code_fragment
+    mov rax,0
  
 
 code_fragment:

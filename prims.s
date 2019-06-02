@@ -75,9 +75,9 @@ is_null:
     mov rbp, rsp
 
     mov rsi, PVAR(0)
-    mov sil, byte [rsi]
+    
 
-    cmp sil, T_NIL
+    cmp rsi, SOB_NIL_ADDRESS
     jne .wrong_type
     mov rax, SOB_TRUE_ADDRESS
     jmp .return
