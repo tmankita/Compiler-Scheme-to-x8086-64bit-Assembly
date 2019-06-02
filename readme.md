@@ -7,5 +7,5 @@ Use A parsing-combinators package for ocaml written by Dr. Mayer Goldberg in oca
 - Lecturer: Dr. Mayer Goldberg
 - Year: 2019 Sems.A
 - Ben-Gurion university of the negev
-- Grade: 100
+- Grade: 95
 
